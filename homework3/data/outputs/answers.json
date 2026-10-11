@@ -1,0 +1,45 @@
+{
+  "q1": {
+    "dummy": "month_wom_October_w4",
+    "abs_corr": 0.025,
+    "corr_signed": 0.0246,
+    "n_month_wom_dummies": 60
+  },
+  "q2": {
+    "best_new_rule": "pred3_manual_dgs10_5",
+    "precision": 0.588,
+    "new_rules": {
+      "pred3_manual_dgs10_5": {
+        "test_positive_preds": 15910,
+        "precision": 0.5877
+      },
+      "pred4_manual_dgs10_fedfunds": {
+        "test_positive_preds": 15921,
+        "precision": 0.5025
+      }
+    }
+  },
+  "q3": {
+    "only_pred5_correct_test": 1243,
+    "n_test_rows": 33163,
+    "clf10_test_precision": 0.5912
+  },
+  "q4": {
+    "best_max_depth": 4,
+    "best_test_precision": 0.6292,
+    "test_precision_by_depth": {
+      "1": 0.5701,
+      "2": 0.6225,
+      "3": 0.572,
+      "4": 0.6292,
+      "5": 0.6,
+      "6": 0.6062,
+      "7": 0.6211,
+      "8": 0.6218,
+      "9": 0.6112,
+      "10": 0.5912,
+      "11": 0.6028,
+      "12": 0.5819
+    }
+  }
+}

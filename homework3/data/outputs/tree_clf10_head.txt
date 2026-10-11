@@ -1,0 +1,46 @@
+|--- cpi_core_yoy <= 0.02
+|   |--- DGS10 <= 1.75
+|   |   |--- DGS1 <= 0.56
+|   |   |   |--- growth_snp500_90d <= 1.14
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- growth_snp500_90d >  1.14
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |--- DGS1 >  0.56
+|   |   |   |--- growth_btc_usd_30d <= 1.07
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- growth_btc_usd_30d >  1.07
+|   |   |   |   |--- truncated branch of depth 7
+|   |--- DGS10 >  1.75
+|   |   |--- growth_wti_oil_365d <= 1.50
+|   |   |   |--- Month_7 <= 0.50
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- Month_7 >  0.50
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |--- growth_wti_oil_365d >  1.50
+|   |   |   |--- growth_wti_oil_30d <= 1.00
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- growth_wti_oil_30d >  1.00
+|   |   |   |   |--- truncated branch of depth 7
+|--- cpi_core_yoy >  0.02
+|   |--- FEDFUNDS <= 4.96
+|   |   |--- growth_btc_usd_365d <= 1.21
+|   |   |   |--- growth_dji_90d <= 0.96
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- growth_dji_90d >  0.96
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |--- growth_btc_usd_365d >  1.21
+|   |   |   |--- growth_gold_365d <= 1.30
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- growth_gold_365d >  1.30
+|   |   |   |   |--- truncated branch of depth 7
+|   |--- FEDFUNDS >  4.96
+|   |   |--- growth_wti_oil_365d <= 0.91
+|   |   |   |--- cpi_core_mom <= 0.00
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- cpi_core_mom >  0.00
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |--- growth_wti_oil_365d >  0.91
+|   |   |   |--- growth_dji_90d <= 1.05
+|   |   |   |   |--- truncated branch of depth 7
+|   |   |   |--- growth_dji_90d >  1.05
+|   |   |   |   |--- truncated branch of depth 7

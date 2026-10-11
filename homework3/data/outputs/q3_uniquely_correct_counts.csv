@@ -1,0 +1,7 @@
+prediction,test_uniquely_correct
+pred0_manual_cci,150
+pred1_manual_prev_g1,380
+pred2_manual_prev_g1_and_snp,2
+pred3_manual_dgs10_5,1020
+pred4_manual_dgs10_fedfunds,1550
+pred5_clf_10,1243

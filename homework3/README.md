@@ -20,8 +20,9 @@ step by step (same dataset, variable sets, dummies, temporal split and cleaning)
 | **Q3** — TEST rows where `pred5_clf_10` is correct while `pred0`–`pred4` are all wrong | **1243** (out of 33,163 TEST rows). `clf10` TEST precision 0.591. |
 | **Q4** — Optimal `max_depth` (1–12) by TEST precision | **4** — TEST precision **0.629** (4,201 / 6,677), > 0.58 and better than every earlier prediction. |
 
-Machine-readable versions are written to
-[`data/outputs/answers.json`](data/outputs/answers.json) when you run the pipeline.
+Machine-readable versions are in
+[`data/outputs/answers.json`](data/outputs/answers.json) (committed results of
+the last run; regenerated whenever you run the pipeline).
 
 ### Sanity checks against the lecture notebook
 
@@ -134,23 +135,25 @@ TEST precision of all predictions:
 homework3/
   solution.py         Main pipeline: data prep + Q1–Q4, prints answers
   README.md           This file
-  data/               (generated at run time, NOT committed)
-    raw/              stocks_df_combined_2026_09_18.parquet.brotli (~144 MB)
-    outputs/          Analysis results (CSV, TXT, JSON)
+  .gitignore          Excludes data/raw/
+  data/
+    raw/              stocks_df_combined_2026_09_18.parquet.brotli (~144 MB,
+                      downloaded at run time, NOT committed)
+    outputs/          Analysis results of the last run (CSV, TXT, JSON, committed)
 ```
 
-### Deliverables (under `data/outputs/`)
+### Deliverables (under [`data/outputs/`](data/outputs/))
 
 | File | Description |
 | --- | --- |
-| `answers.json` | Final answers in machine-readable form |
-| `run_log.txt` | Full console output of the last run |
-| `q1_month_wom_corr.csv` | All 60 `month_wom` dummies with `corr`, `abs_corr` (sorted) |
-| `q2_hand_rules_precision.csv` | TEST positives / TP / FP / precision for pred0–pred4 |
-| `q3_uniquely_correct_counts.csv` | Uniquely-correct TEST rows per prediction |
-| `q3_clf10_feature_importance.csv`, `tree_clf10_head.txt` | Top-20 importances and top 3 levels of `clf10` |
-| `q4_depth_tuning.csv` | Precision/accuracy per `max_depth` (TEST + VALIDATION check) |
-| `q4_precision_all_preds.csv`, `tree_best_head.txt` | pred0–pred6 TEST precision; best (depth 4) tree |
+| [`answers.json`](data/outputs/answers.json) | Final answers in machine-readable form |
+| [`run_log.txt`](data/outputs/run_log.txt) | Full console output of the last run |
+| [`q1_month_wom_corr.csv`](data/outputs/q1_month_wom_corr.csv) | All 60 `month_wom` dummies with `corr`, `abs_corr` (sorted) |
+| [`q2_hand_rules_precision.csv`](data/outputs/q2_hand_rules_precision.csv) | TEST positives / TP / FP / precision for pred0–pred4 |
+| [`q3_uniquely_correct_counts.csv`](data/outputs/q3_uniquely_correct_counts.csv) | Uniquely-correct TEST rows per prediction |
+| [`q3_clf10_feature_importance.csv`](data/outputs/q3_clf10_feature_importance.csv), [`tree_clf10_head.txt`](data/outputs/tree_clf10_head.txt) | Top-20 importances and top 3 levels of `clf10` |
+| [`q4_depth_tuning.csv`](data/outputs/q4_depth_tuning.csv) | Precision/accuracy per `max_depth` (TEST + VALIDATION check) |
+| [`q4_precision_all_preds.csv`](data/outputs/q4_precision_all_preds.csv), [`tree_best_head.txt`](data/outputs/tree_best_head.txt) | pred0–pred6 TEST precision; best (depth 4) tree |
 
 ---
 

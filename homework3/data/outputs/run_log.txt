@@ -1,0 +1,133 @@
+======================================================================
+Data | Module 3 dataset + notebook section 0
+======================================================================
+  [data] stocks_df_combined_2026_09_18.parquet.brotli: 240759 rows x 203 cols
+  [data] Date >= 2000-01-01: 202292 rows, 33 tickers
+  [data] dummies: 115 total, 60 month_wom
+  [data] temporal split:
+                      min        max   count
+    split                                   
+    test       2022-09-16 2026-09-18   33163
+    train      2000-01-03 2018-09-13  136842
+    validation 2018-09-14 2022-09-15   32287
+======================================================================
+Q1 | Month + Week-of-Month dummies: max |corr| with target
+======================================================================
+  top-10 month_wom dummies by |corr|:
+                             corr  abs_corr
+    month_wom_October_w4   0.0246    0.0246
+    month_wom_November_w3  0.0233    0.0233
+    month_wom_February_w1 -0.0209    0.0209
+    month_wom_January_w2  -0.0198    0.0198
+    month_wom_January_w5  -0.0198    0.0198
+    month_wom_November_w2  0.0191    0.0191
+    month_wom_January_w3  -0.0185    0.0185
+    month_wom_February_w2 -0.0183    0.0183
+    month_wom_January_w4  -0.0183    0.0183
+    month_wom_October_w3   0.0179    0.0179
+
+  >>> Q1 answer: month_wom_October_w4 |corr| = 0.025 (signed +0.0246)
+
+======================================================================
+Q2 | Hand rules: precision on TEST
+======================================================================
+                      prediction  test_positive_preds    tp   fp  precision
+                pred0_manual_cci                  921   520  401     0.5646
+            pred1_manual_prev_g1                19158 11086 8072     0.5787
+    pred2_manual_prev_g1_and_snp                15244  8728 6516     0.5726
+            pred3_manual_dgs10_5                15910  9351 6559     0.5877
+     pred4_manual_dgs10_fedfunds                15921  8001 7920     0.5025
+
+  >>> Q2 answer: pred3_manual_dgs10_5 precision = 0.588 (9351/15910)
+
+  [trees] features=299, TRAIN+VALIDATION rows=169129
+
+======================================================================
+Q3 | pred5_clf_10: TEST rows where only the tree is correct
+======================================================================
+  clf10: depth=10, TEST precision=0.5912 (5101/8628)
+  uniquely-correct TEST rows per prediction (generic function):
+    pred0_manual_cci                 150
+    pred1_manual_prev_g1             380
+    pred2_manual_prev_g1_and_snp       2
+    pred3_manual_dgs10_5            1020
+    pred4_manual_dgs10_fedfunds     1550
+    pred5_clf_10                    1243
+  top features: cpi_core_yoy, growth_gold_365d, cpi_core_mom, growth_wti_oil_365d, FEDFUNDS
+
+  >>> Q3 answer: 1243 TEST rows where only pred5_clf_10 is correct (of 33163 TEST rows)
+
+======================================================================
+Q4 | DecisionTree max_depth tuning (1..12), TEST precision
+======================================================================
+  depth  1: test precision=0.5701 accuracy=0.5701 positives=33163 | val precision (train-only fit)=0.6491
+  depth  2: test precision=0.6225 accuracy=0.5168 positives=11760 | val precision (train-only fit)=0.6491
+  depth  3: test precision=0.5720 accuracy=0.4918 positives=14263 | val precision (train-only fit)=0.6439
+  depth  4: test precision=0.6292 accuracy=0.4819 positives= 6677 | val precision (train-only fit)=0.6595
+  depth  5: test precision=0.6000 accuracy=0.4750 positives= 7487 | val precision (train-only fit)=0.6439
+  depth  6: test precision=0.6062 accuracy=0.4728 positives= 6704 | val precision (train-only fit)=0.6054
+  depth  7: test precision=0.6211 accuracy=0.4787 positives= 6682 | val precision (train-only fit)=0.6118
+  depth  8: test precision=0.6218 accuracy=0.4990 positives= 9410 | val precision (train-only fit)=0.6174
+  depth  9: test precision=0.6112 accuracy=0.4906 positives= 9053 | val precision (train-only fit)=0.6166
+  depth 10: test precision=0.5912 accuracy=0.4774 positives= 8628 | val precision (train-only fit)=0.6293
+  depth 11: test precision=0.6028 accuracy=0.4767 positives= 7552 | val precision (train-only fit)=0.6203
+  depth 12: test precision=0.5819 accuracy=0.4720 positives= 8518 | val precision (train-only fit)=0.6424
+
+  TEST precision, all predictions:
+                      prediction  test_positive_preds    tp  precision
+                pred0_manual_cci                  921   520     0.5646
+            pred1_manual_prev_g1                19158 11086     0.5787
+    pred2_manual_prev_g1_and_snp                15244  8728     0.5726
+            pred3_manual_dgs10_5                15910  9351     0.5877
+     pred4_manual_dgs10_fedfunds                15921  8001     0.5025
+                    pred5_clf_10                 8628  5101     0.5912
+                  pred6_clf_best                 6677  4201     0.6292
+
+  >>> Q4 answer: best_max_depth = 4 (TEST precision 0.6292)
+
+Done. Answers written to: D:\1\making_money\stock-markets-analytics-zoomcamp\homework\homework3\data\outputs\answers.json
+{
+  "q1": {
+    "dummy": "month_wom_October_w4",
+    "abs_corr": 0.025,
+    "corr_signed": 0.0246,
+    "n_month_wom_dummies": 60
+  },
+  "q2": {
+    "best_new_rule": "pred3_manual_dgs10_5",
+    "precision": 0.588,
+    "new_rules": {
+      "pred3_manual_dgs10_5": {
+        "test_positive_preds": 15910,
+        "precision": 0.5877
+      },
+      "pred4_manual_dgs10_fedfunds": {
+        "test_positive_preds": 15921,
+        "precision": 0.5025
+      }
+    }
+  },
+  "q3": {
+    "only_pred5_correct_test": 1243,
+    "n_test_rows": 33163,
+    "clf10_test_precision": 0.5912
+  },
+  "q4": {
+    "best_max_depth": 4,
+    "best_test_precision": 0.6292,
+    "test_precision_by_depth": {
+      "1": 0.5701,
+      "2": 0.6225,
+      "3": 0.572,
+      "4": 0.6292,
+      "5": 0.6,
+      "6": 0.6062,
+      "7": 0.6211,
+      "8": 0.6218,
+      "9": 0.6112,
+      "10": 0.5912,
+      "11": 0.6028,
+      "12": 0.5819
+    }
+  }
+}
