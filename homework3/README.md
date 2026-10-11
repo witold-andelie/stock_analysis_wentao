@@ -17,7 +17,7 @@ step by step (same dataset, variable sets, dummies, temporal split and cleaning)
 | --- | --- |
 | **Q1** — Highest absolute correlation of a `<month>_w<week>` dummy with `is_positive_growth_30d_future` | **0.025** — `month_wom_October_w4` (corr = +0.0246). Runner-up: `November_w3` +0.0233, `February_w1` −0.0209. 60 `month_wom` dummies, 115 dummies in total. |
 | **Q2** — Precision on TEST of the best NEW hand rule (`pred3` / `pred4`) | **0.588** — `pred3_manual_dgs10_5` = `(DGS10 <= 4.5) & (DGS5 <= 4)`: 9,351 / 15,910. `pred4_manual_dgs10_fedfunds` reaches only 0.503 (8,001 / 15,921). |
-| **Q3** — TEST rows where `pred5_clf_10` is correct while `pred0`–`pred4` are all wrong | **1243** (out of 33,163 TEST rows). `clf10` TEST precision 0.591. |
+| **Q3** — TEST rows where `pred5_clf_10` is correct while `pred0`–`pred4` are all wrong | **1243** (out of 33,163 TEST rows; `clf10` TEST precision 0.591) → 选项 **1171**（最接近，见下方 Q3 note） |
 | **Q4** — Optimal `max_depth` (1–12) by TEST precision | **4** — TEST precision **0.629** (4,201 / 6,677), > 0.58 and better than every earlier prediction. |
 
 Machine-readable versions are in
@@ -43,6 +43,26 @@ The spec says "for the rule that **does** make positive predictions on the TEST 
 (wording carried over from 2025). On the 2026 dataset **both** new rules fire on
 TEST (15,910 vs 15,921 positive predictions), so the answer is the better of the
 two: `pred3` = **0.588**.
+
+### Q3 note — why 1243 and not exactly 1171
+
+Answer options: 271 / 571 / 1171 / 1571. The spec-exact pipeline gives **1243**,
+closest to **1171**. The gap comes from tie-breaking inside the depth-10 tree,
+not from the pipeline:
+
+- Deep nodes contain few samples, so several features often give exactly the
+  same split gain; sklearn keeps the first one in its `random_state`-shuffled
+  feature order, which depends on the column order of `X`.
+- Re-running with identical data, rules and `random_state=42`, changing **only
+  the column order**, gives Q3 counts of 1237–1396 (spec order 1243,
+  `month_wom` dummies first 1332, four random orders 1343 / 1396 / 1383 / 1237).
+- scikit-learn 1.6.1 (Colab) and 1.8.0 give the same 1243, so the version is
+  not the cause. Using the pre-correction `pred3` rule
+  `(DGS10 <= 4) & (DGS5 <= 1)` gives 1801 instead, so it is not that either.
+- All four options end in "71", i.e. the distractors are offsets of the
+  instructor's own value 1171.
+- Q4 is unaffected: the depth-4 tree has TEST precision 0.6292 under every
+  column order.
 
 ### Q3 — uniquely correct predictions per column (TEST)
 
