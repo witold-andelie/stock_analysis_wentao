@@ -1,7 +1,5 @@
 # Stock Market Analytics Zoomcamp — Homework 4 (Module 4, 2026 cohort)
 
-> 本 README 仅对应 **Homework 4（Module 4 "Trading Strategy and Simulation", 2026 cohort）**，不覆盖其他作业。
-
 Solutions for Homework 4 (2026 cohort) of the
 [Stock Market Analytics Zoomcamp](https://github.com/DataTalksClub/stock-markets-analytics-zoomcamp).
 Spec: [`cohorts/2026/homework4.md`](https://github.com/DataTalksClub/stock-markets-analytics-zoomcamp/blob/main/cohorts/2026/homework4.md).
@@ -85,20 +83,7 @@ targeting predicted growth above 2.2% instead of above 0%".
 
 ### Q4 (exploratory, free text) — ideal trading strategy
 
-> Combine the Q1 Random Forest (208 features, no ticker / month-week dummies)
-> with a hard cap on concurrent names. Each morning, rank TEST names by
-> `rf_best` probability and keep those with **p ≥ 0.57** (the Q2 efficiency
-> cutoff). Invest equally in the **top 3** of that list, sizing each $100 ticket
-> by `(p − 0.55) / 0.10` clipped to `[0.5, 1.5]`, so a 0.65 name gets 1.5× a
-> 0.55 name. Only take the trade if `pred5_clf_10` also equals 1 — Q3 showed
-> that the depth-10 tree is the most robust CAGR once the target is a real
-> 2.2% move rather than any up-tick, and its splits are macro regime filters
-> (`cpi_core_yoy`, `DGS10`, `FEDFUNDS`). Cap the book at 5 simultaneous 30-day
-> holds so average daily investments stay below the Q2 budget. Exit at 30
-> trading days (same horizon as `growth_future_30d`) with a 10% stop-loss on
-> the holding; skip a new entry when `growth_snp500_30d < 1` and `DGS10 > 4`
-> at the same time, which is the regime where `pred4` collapsed to ~0.50
-> precision.
+I would use the reduced-feature Random Forest (208 features, no ticker or month-week dummies) as the primary signal. Each morning I rank names by predicted probability and keep those with p >= 0.57, the Q2 cutoff that keeps average daily investments below 5 while still delivering CAGR close to 1.12. I invest equally in the top 3 of that list, sizing each ticket as $100 times (p - 0.55) / 0.10 clipped to [0.5, 1.5], so a 0.65 name gets 1.5x a 0.55 name. I only take the trade if the depth-10 tree also predicts 1, because after raising the target to 2.2% future growth that tree had the best CAGR and its splits are macro filters (CPI, DGS10, FEDFUNDS). I cap the book at 5 simultaneous 30-day holds, exit at 30 trading days or on a 10% stop-loss, and skip new entries when S&P 500 30-day growth is below 1 and DGS10 is above 4.
 
 ---
 
