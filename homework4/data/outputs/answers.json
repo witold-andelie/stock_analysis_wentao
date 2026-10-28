@@ -1,0 +1,78 @@
+{
+  "q1": {
+    "n_features": 208,
+    "n_numerical": 186,
+    "n_dummies": 22,
+    "pred": "pred10_rf_best_rule_55",
+    "cagr": 1.1279,
+    "avg_investments_per_day": 6.0581,
+    "n_trades": 3756,
+    "original_cagr": 1.1195
+  },
+  "q2": {
+    "threshold": 0.57,
+    "threshold_hundredths": 57,
+    "pred": "pred13_rf_best_rule_57",
+    "cagr": 1.092,
+    "avg_investments_per_day": 4.8512,
+    "n_trades": 2086,
+    "pred10_avg_investments_per_day": 6.0581,
+    "candidates_below_5": [
+      {
+        "pred": "pred13_rf_best_rule_57",
+        "cagr": 1.092,
+        "avg_investments_per_day": 4.8512
+      },
+      {
+        "pred": "pred14_rf_best_rule_58",
+        "cagr": 1.0671,
+        "avg_investments_per_day": 4.4941
+      },
+      {
+        "pred": "pred15_rf_best_rule_59",
+        "cagr": 1.0574,
+        "avg_investments_per_day": 4.3254
+      },
+      {
+        "pred": "pred17_rf_best_rule_61",
+        "cagr": 1.0543,
+        "avg_investments_per_day": 3.6
+      },
+      {
+        "pred": "pred16_rf_best_rule_60",
+        "cagr": 1.049,
+        "avg_investments_per_day": 3.9418
+      },
+      {
+        "pred": "pred18_rf_best_rule_62",
+        "cagr": 1.0335,
+        "avg_investments_per_day": 3.49
+      },
+      {
+        "pred": "pred19_rf_best_rule_63",
+        "cagr": 1.0229,
+        "avg_investments_per_day": 3.0946
+      },
+      {
+        "pred": "pred20_rf_best_rule_64",
+        "cagr": 1.0176,
+        "avg_investments_per_day": 3.06
+      }
+    ]
+  },
+  "q3": {
+    "n_features": 301,
+    "target_threshold": 1.022,
+    "target_positive_rate": 0.4912,
+    "pred": "pred5_clf_10",
+    "n_trades": 7337,
+    "cagr": 1.1218,
+    "avg_investments_per_day": 8.0098,
+    "best_cagr_pred": "pred5_clf_10",
+    "best_cagr": 1.1218
+  },
+  "q4": {
+    "see": "README.md",
+    "summary": "Size each 30-day hold by Random Forest probability (threshold ladder 0.57-0.65), cap concurrent names per day, and only deploy when the depth-4/10 tree agrees on the macro regime."
+  }
+}

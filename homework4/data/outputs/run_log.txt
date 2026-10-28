@@ -1,0 +1,192 @@
+======================================================================
+Homework 4 鈥?load dataset
+======================================================================
+  [data] stocks_df_combined_2026_09_18.parquet.brotli: 240759 rows x 203 cols
+======================================================================
+Q1+Q2 | fewer dummies (drop Ticker + month_wom), original target
+======================================================================
+  [data] Date>=2000: 202292 rows, 33 tickers; CATEGORICAL=['Month', 'Weekday', 'ticker_type']; NUMERICAL+DUMMIES=208 (186 num + 22 dummies)
+  [data] target is_positive_growth_30d_future=1 rate: 0.5895
+  [data] temporal split:
+                      min        max   count
+    split                                   
+    test       2022-09-16 2026-09-18   33163
+    train      2000-01-03 2018-09-13  136842
+    validation 2018-09-14 2022-09-15   32287
+  [fit] trees depth 10/4/7 in 30.9s
+  [fit] RandomForest n_estimators=100 max_depth=13 in 4.5s
+  [q2] extra RF rules: ['pred12_rf_best_rule_56', 'pred13_rf_best_rule_57', 'pred14_rf_best_rule_58', 'pred15_rf_best_rule_59', 'pred16_rf_best_rule_60', 'pred17_rf_best_rule_61', 'pred18_rf_best_rule_62', 'pred19_rf_best_rule_63', 'pred20_rf_best_rule_64']
+  [q2] RF df_scores (threshold 0.50..0.70, even steps):
+     threshold   tp   fp  precision  recall
+          0.50 7128 4775     0.5988  0.3770
+          0.52 4790 3173     0.6015  0.2534
+          0.54 2964 1949     0.6033  0.1568
+          0.56 1664 1116     0.5986  0.0880
+          0.58  916  603     0.6030  0.0485
+          0.60  445  300     0.5973  0.0235
+          0.62  218  131     0.6246  0.0115
+          0.64  102   51     0.6667  0.0054
+          0.66   32   19     0.6275  0.0017
+          0.68    8    5     0.6154  0.0004
+
+  simulation (all predictors):
+                       prediction  sim1_count_investments  sim1_gross_rev  sim1_fees  sim1_net_rev  sim1_average_net_revenue  sim1_avg_investments_per_day  sim1_q75_investments_per_day  sim1_capital  sim1_CAGR  sim1_growth_capital_4y
+                 pred0_manual_cci                     921         1839.39     -184.2       1655.19                    1.7972                        1.8758                           2.0        6000.0     1.0628                1.275865
+             pred1_manual_prev_g1                   19158        44647.37    -3831.6      40815.77                    2.1305                       18.4212                          24.0       72000.0     1.1188                1.566886
+     pred2_manual_prev_g1_and_snp                   15244        33808.09    -3048.8      30759.29                    2.0178                       21.7151                          25.0       75000.0     1.0897                1.410124
+             pred3_manual_dgs10_5                   15910        40723.80    -3182.0      37541.80                    2.3596                       31.9478                          33.0       99000.0     1.0837                1.379210
+      pred4_manual_dgs10_fedfunds                   15921        18532.88    -3184.2      15348.68                    0.9641                       31.9058                          33.0       99000.0     1.0367                1.155037
+                     pred5_clf_10                    9699        31330.77    -1939.8      29390.97                    3.0303                       10.5884                          17.0       51000.0     1.1205                1.576294
+                      pred6_clf_4                    6677        22383.45    -1335.4      21048.05                    3.1523                       30.3500                          33.0       99000.0     1.0494                1.212607
+            pred7_clf_second_best                    5833        21481.06    -1166.6      20314.46                    3.4827                       14.1922                          29.0       87000.0     1.0539                1.233500
+    pred8_clf_second_best_rule_56                    5820        21461.16    -1164.0      20297.16                    3.4875                       14.1951                          29.0       87000.0     1.0538                1.233301
+    pred9_clf_second_best_rule_66                    4134        11485.31     -826.8      10658.51                    2.5783                       11.1429                          25.0       75000.0     1.0338                1.142113
+           pred10_rf_best_rule_55                    3756        13734.80     -751.2      12983.60                    3.4568                        6.0581                           7.0       21000.0     1.1279                1.618266
+           pred11_rf_best_rule_65                      92          360.12      -18.4        341.72                    3.7144                        3.2857                           3.0        9000.0     1.0094                1.037969
+           pred12_rf_best_rule_56                    2780        10453.13     -556.0       9897.13                    3.5601                        5.3462                           7.0       21000.0     1.1013                1.471292
+           pred13_rf_best_rule_57                    2086         8010.53     -417.2       7593.33                    3.6401                        4.8512                           6.0       18000.0     1.0920                1.421851
+           pred14_rf_best_rule_58                    1519         5646.43     -303.8       5342.63                    3.5172                        4.4941                           6.0       18000.0     1.0671                1.296813
+           pred15_rf_best_rule_59                    1090         3971.32     -218.0       3753.32                    3.4434                        4.3254                           5.0       15000.0     1.0574                1.250221
+           pred16_rf_best_rule_60                     745         2680.14     -149.0       2531.14                    3.3975                        3.9418                           4.0       12000.0     1.0490                1.210928
+           pred17_rf_best_rule_61                     522         2222.89     -104.4       2118.49                    4.0584                        3.6000                           3.0        9000.0     1.0543                1.235388
+           pred18_rf_best_rule_62                     349         1336.30      -69.8       1266.50                    3.6289                        3.4900                           3.0        9000.0     1.0335                1.140722
+           pred19_rf_best_rule_63                     229          899.38      -45.8        853.58                    3.7274                        3.0946                           3.0        9000.0     1.0229                1.094843
+           pred20_rf_best_rule_64                     153          680.94      -30.6        650.34                    4.2506                        3.0600                           3.0        9000.0     1.0176                1.072260
+
+  >>> Q1 answer: pred10_rf_best_rule_55 CAGR = 1.1279 (avg trades/day 6.058, n_trades=3756; original notebook CAGR was 1.1195; features=208)
+
+  RF extra thresholds (0.56..0.64):
+                prediction  sim1_count_investments  sim1_gross_rev  sim1_fees  sim1_net_rev  sim1_average_net_revenue  sim1_avg_investments_per_day  sim1_q75_investments_per_day  sim1_capital  sim1_CAGR  sim1_growth_capital_4y
+    pred12_rf_best_rule_56                    2780        10453.13     -556.0       9897.13                    3.5601                        5.3462                           7.0       21000.0     1.1013                1.471292
+    pred13_rf_best_rule_57                    2086         8010.53     -417.2       7593.33                    3.6401                        4.8512                           6.0       18000.0     1.0920                1.421851
+    pred14_rf_best_rule_58                    1519         5646.43     -303.8       5342.63                    3.5172                        4.4941                           6.0       18000.0     1.0671                1.296813
+    pred15_rf_best_rule_59                    1090         3971.32     -218.0       3753.32                    3.4434                        4.3254                           5.0       15000.0     1.0574                1.250221
+    pred16_rf_best_rule_60                     745         2680.14     -149.0       2531.14                    3.3975                        3.9418                           4.0       12000.0     1.0490                1.210928
+    pred17_rf_best_rule_61                     522         2222.89     -104.4       2118.49                    4.0584                        3.6000                           3.0        9000.0     1.0543                1.235388
+    pred18_rf_best_rule_62                     349         1336.30      -69.8       1266.50                    3.6289                        3.4900                           3.0        9000.0     1.0335                1.140722
+    pred19_rf_best_rule_63                     229          899.38      -45.8        853.58                    3.7274                        3.0946                           3.0        9000.0     1.0229                1.094843
+    pred20_rf_best_rule_64                     153          680.94      -30.6        650.34                    4.2506                        3.0600                           3.0        9000.0     1.0176                1.072260
+
+  >>> Q2 answer: threshold = 0.57 (pred13_rf_best_rule_57; CAGR=1.0920, avg trades/day=4.851 < 5)
+
+======================================================================
+Q3 | original dummies, target growth_future_30d > 1.022
+======================================================================
+  [data] Date>=2000: 202292 rows, 33 tickers; CATEGORICAL=['Month', 'Weekday', 'Ticker', 'ticker_type', 'month_wom']; NUMERICAL+DUMMIES=301 (186 num + 115 dummies)
+  [data] target is_positive_growth_30d_future=1 rate: 0.4912
+  [data] temporal split:
+                      min        max   count
+    split                                   
+    test       2022-09-16 2026-09-18   33163
+    train      2000-01-03 2018-09-13  136842
+    validation 2018-09-14 2022-09-15   32287
+  [fit] trees depth 10/4/7 in 33.2s
+  [fit] RandomForest n_estimators=100 max_depth=13 in 4.5s
+
+  simulation (all predictors):
+                       prediction  sim1_count_investments  sim1_gross_rev  sim1_fees  sim1_net_rev  sim1_average_net_revenue  sim1_avg_investments_per_day  sim1_q75_investments_per_day  sim1_capital  sim1_CAGR  sim1_growth_capital_4y
+                 pred0_manual_cci                     921         1839.39     -184.2       1655.19                    1.7972                        1.8758                           2.0        6000.0     1.0628                1.275865
+             pred1_manual_prev_g1                   19158        44647.37    -3831.6      40815.77                    2.1305                       18.4212                          24.0       72000.0     1.1188                1.566886
+     pred2_manual_prev_g1_and_snp                   15244        33808.09    -3048.8      30759.29                    2.0178                       21.7151                          25.0       75000.0     1.0897                1.410124
+             pred3_manual_dgs10_5                   15910        40723.80    -3182.0      37541.80                    2.3596                       31.9478                          33.0       99000.0     1.0837                1.379210
+      pred4_manual_dgs10_fedfunds                   15921        18532.88    -3184.2      15348.68                    0.9641                       31.9058                          33.0       99000.0     1.0367                1.155037
+                     pred5_clf_10                    7337        18975.56    -1467.4      17508.16                    2.3863                        8.0098                          10.0       30000.0     1.1218                1.583605
+                      pred6_clf_4                    7209        24005.75    -1441.8      22563.95                    3.1300                       30.8077                          33.0       99000.0     1.0527                1.227919
+            pred7_clf_second_best                   10532        24570.01    -2106.4      22463.61                    2.1329                       12.6739                          19.0       57000.0     1.0866                1.394098
+    pred8_clf_second_best_rule_56                   10276        22124.85    -2055.2      20069.65                    1.9531                       12.4860                          18.0       54000.0     1.0822                1.371660
+    pred9_clf_second_best_rule_66                    9746        19278.96    -1949.2      17329.76                    1.7781                       13.4799                          19.0       57000.0     1.0686                1.304031
+           pred10_rf_best_rule_55                     171         1303.96      -34.2       1269.76                    7.4255                        1.9213                           2.0        6000.0     1.0492                1.211626
+           pred11_rf_best_rule_65                       3           67.45       -0.6         66.85                   22.2841                        1.0000                           1.0        3000.0     1.0055                1.022284
+
+  ranked by CAGR:
+                       prediction  sim1_count_investments  sim1_gross_rev  sim1_fees  sim1_net_rev  sim1_average_net_revenue  sim1_avg_investments_per_day  sim1_q75_investments_per_day  sim1_capital  sim1_CAGR  sim1_growth_capital_4y
+                     pred5_clf_10                    7337        18975.56    -1467.4      17508.16                    2.3863                        8.0098                          10.0       30000.0     1.1218                1.583605
+             pred1_manual_prev_g1                   19158        44647.37    -3831.6      40815.77                    2.1305                       18.4212                          24.0       72000.0     1.1188                1.566886
+     pred2_manual_prev_g1_and_snp                   15244        33808.09    -3048.8      30759.29                    2.0178                       21.7151                          25.0       75000.0     1.0897                1.410124
+            pred7_clf_second_best                   10532        24570.01    -2106.4      22463.61                    2.1329                       12.6739                          19.0       57000.0     1.0866                1.394098
+             pred3_manual_dgs10_5                   15910        40723.80    -3182.0      37541.80                    2.3596                       31.9478                          33.0       99000.0     1.0837                1.379210
+    pred8_clf_second_best_rule_56                   10276        22124.85    -2055.2      20069.65                    1.9531                       12.4860                          18.0       54000.0     1.0822                1.371660
+    pred9_clf_second_best_rule_66                    9746        19278.96    -1949.2      17329.76                    1.7781                       13.4799                          19.0       57000.0     1.0686                1.304031
+                 pred0_manual_cci                     921         1839.39     -184.2       1655.19                    1.7972                        1.8758                           2.0        6000.0     1.0628                1.275865
+
+  >>> Q3 answer: pred5_clf_10 n_trades = 7337 (CAGR=1.1218, avg trades/day=8.010; best CAGR overall is pred5_clf_10 = 1.1218)
+
+Wrote D:\1\making_money\stock_analysis_wentao\homework4\data\outputs\answers.json
+{
+  "q1": {
+    "n_features": 208,
+    "n_numerical": 186,
+    "n_dummies": 22,
+    "pred": "pred10_rf_best_rule_55",
+    "cagr": 1.1279,
+    "avg_investments_per_day": 6.0581,
+    "n_trades": 3756,
+    "original_cagr": 1.1195
+  },
+  "q2": {
+    "threshold": 0.57,
+    "threshold_hundredths": 57,
+    "pred": "pred13_rf_best_rule_57",
+    "cagr": 1.092,
+    "avg_investments_per_day": 4.8512,
+    "n_trades": 2086,
+    "pred10_avg_investments_per_day": 6.0581,
+    "candidates_below_5": [
+      {
+        "pred": "pred13_rf_best_rule_57",
+        "cagr": 1.092,
+        "avg_investments_per_day": 4.8512
+      },
+      {
+        "pred": "pred14_rf_best_rule_58",
+        "cagr": 1.0671,
+        "avg_investments_per_day": 4.4941
+      },
+      {
+        "pred": "pred15_rf_best_rule_59",
+        "cagr": 1.0574,
+        "avg_investments_per_day": 4.3254
+      },
+      {
+        "pred": "pred17_rf_best_rule_61",
+        "cagr": 1.0543,
+        "avg_investments_per_day": 3.6
+      },
+      {
+        "pred": "pred16_rf_best_rule_60",
+        "cagr": 1.049,
+        "avg_investments_per_day": 3.9418
+      },
+      {
+        "pred": "pred18_rf_best_rule_62",
+        "cagr": 1.0335,
+        "avg_investments_per_day": 3.49
+      },
+      {
+        "pred": "pred19_rf_best_rule_63",
+        "cagr": 1.0229,
+        "avg_investments_per_day": 3.0946
+      },
+      {
+        "pred": "pred20_rf_best_rule_64",
+        "cagr": 1.0176,
+        "avg_investments_per_day": 3.06
+      }
+    ]
+  },
+  "q3": {
+    "n_features": 301,
+    "target_threshold": 1.022,
+    "target_positive_rate": 0.4912,
+    "pred": "pred5_clf_10",
+    "n_trades": 7337,
+    "cagr": 1.1218,
+    "avg_investments_per_day": 8.0098,
+    "best_cagr_pred": "pred5_clf_10",
+    "best_cagr": 1.1218
+  },
+  "q4": {
+    "see": "README.md",
+    "summary": "Size each 30-day hold by Random Forest probability (threshold ladder 0.57-0.65), cap concurrent names per day, and only deploy when the depth-4/10 tree agrees on the macro regime."
+  }
+}
