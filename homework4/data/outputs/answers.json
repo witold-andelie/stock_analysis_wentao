@@ -65,9 +65,10 @@
     "target_threshold": 1.022,
     "target_positive_rate": 0.4912,
     "pred": "pred5_clf_10",
-    "n_trades": 7337,
-    "cagr": 1.1218,
     "avg_investments_per_day": 8.0098,
+    "n_trades_total_test": 7337,
+    "answer_option": 8,
+    "cagr": 1.1218,
     "best_cagr_pred": "pred5_clf_10",
     "best_cagr": 1.1218
   },

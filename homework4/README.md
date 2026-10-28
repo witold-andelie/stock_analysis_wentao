@@ -19,7 +19,7 @@ Each question is a **fresh run** of the notebook setup, as the spec requires: Q1
 | --- | --- |
 | **Q1** — CAGR of `pred10_rf_best_rule_55` after dropping `Ticker` and `month_wom` dummies | **1.1279** (208 features; avg 6.06 trades/day, 3,756 TEST trades). Slightly above the original 301-feature CAGR **1.1195**. |
 | **Q2** — RF probability threshold of the second-best rule with avg. daily investments **< 5** | **0.57** — `pred13_rf_best_rule_57`, CAGR **1.092**, 4.85 trades/day. `pred10` (0.55) is still best on CAGR (1.128) but trades 6.06 times/day. |
-| **Q3** — number of trades for `pred5_clf_10` after redefining the target as `growth_future_30d > 1.022` | **7337** (CAGR 1.122, 8.01 trades/day). This is also the best CAGR among all predictors on the new target. |
+| **Q3** — number of trades for `pred5_clf_10` after redefining the target as `growth_future_30d > 1.022` | **8** — notebook `Average investments per day` = 8.01 → `int(round(8.01)) = 8` (options 6 / 7 / 8 / 9). 7,337 TEST investments over 4 years; CAGR 1.122, also the best CAGR on the new target. |
 
 Machine-readable versions are in
 [`data/outputs/answers.json`](data/outputs/answers.json) (committed results of
@@ -70,10 +70,18 @@ higher thresholds cut total trades (`tp+fp`) and eventually lift precision.
 
 Redefining the label to "future 30-day growth > 2.2%" makes the class balance
 almost even (49.1% positives). Manual and RF threshold rules lose their edge;
-the depth-10 tree `pred5_clf_10` is the best CAGR (**1.1218**) and fires on
-**7,337** TEST rows (8.01 trades/day) — fewer than the original-target `pred5`
-count of 9,699 on the Q1/Q2 run, because the model is now aiming at a rarer
-2.2% move instead of any positive move.
+the depth-10 tree `pred5_clf_10` is the best CAGR (**1.1218**) and the spec's
+"number of trades" is the notebook line
+
+```
+Average investments per day: {int(np.round(sim1_avg_investments_per_day))}
+```
+
+which is **8** (`sim1_avg_investments_per_day` = 8.0098). The 4-year TEST
+investment count is 7,337, which is not among the form options 6 / 7 / 8 / 9.
+That daily figure is also lower than the original-target `pred5` run (10.59
+trades/day), matching the spec's "fewer trades per day, since we're now
+targeting predicted growth above 2.2% instead of above 0%".
 
 ### Q4 (exploratory, free text) — ideal trading strategy
 

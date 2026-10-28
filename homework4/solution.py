@@ -466,19 +466,23 @@ def q3(df_full: pd.DataFrame):
     row5 = res.loc[res.prediction == "pred5_clf_10"].iloc[0]
     n_trades = int(row5.sim1_count_investments)
     best_pred = ranked.iloc[0].prediction
+    avg_day = float(row5.sim1_avg_investments_per_day)
+    answer_opt = int(np.round(avg_day))
     print(
-        f"\n  >>> Q3 answer: pred5_clf_10 n_trades = {n_trades} "
-        f"(CAGR={row5.sim1_CAGR:.4f}, avg trades/day={row5.sim1_avg_investments_per_day:.3f}; "
-        f"best CAGR overall is {best_pred} = {ranked.iloc[0].sim1_CAGR:.4f})"
+        f"\n  >>> Q3 answer: pred5_clf_10 Average investments per day = "
+        f"{answer_opt}  (raw {avg_day:.4f}; total TEST trades={n_trades}; "
+        f"CAGR={row5.sim1_CAGR:.4f}; best CAGR overall is {best_pred} = "
+        f"{ranked.iloc[0].sim1_CAGR:.4f})"
     )
     ANSWERS["q3"] = {
         "n_features": int(n_features),
         "target_threshold": 1.022,
         "target_positive_rate": _num(new_df[TARGET].mean(), 4),
         "pred": "pred5_clf_10",
-        "n_trades": n_trades,
+        "avg_investments_per_day": _num(avg_day, 4),
+        "n_trades_total_test": n_trades,
+        "answer_option": answer_opt,
         "cagr": _num(row5.sim1_CAGR, 4),
-        "avg_investments_per_day": _num(row5.sim1_avg_investments_per_day, 4),
         "best_cagr_pred": best_pred,
         "best_cagr": _num(ranked.iloc[0].sim1_CAGR, 4),
     }
