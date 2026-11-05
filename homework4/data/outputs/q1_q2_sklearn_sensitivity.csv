@@ -1,0 +1,3 @@
+sklearn_version,Q1_cagr_4dp,pred10_trades,pred10_avg_per_day,pred10_q75,Q2_threshold,Q2_cagr,Q2_avg_per_day,verdict
+1.8.0,1.1279,3756,6.0581,7.0,0.57,1.0920,4.8512,"first submission: Q1 1.1279 (should be 1.136), Q2 0.57 (should be 0.56) - RF probabilities near boundaries drift vs 1.7.x"
+1.7.2,1.1359,3514,5.1601,6.0,0.56,1.1178,4.4017,"matches official answers: Q1 1.136 (notebook prints np.round(CAGR,3)), Q2 0.56"

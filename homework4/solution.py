@@ -19,12 +19,27 @@ The dataset is the same parquet as Module 3 / the 2026 notebook
 and the neural net from the notebook are skipped: they are commented-out /
 precomputed there and are not needed for Q1-Q3. Trees and Random Forest
 use the notebook's hard-coded hyperparameters (no retuning).
+
+NOTE on versions (verified empirically): results reproduce the official
+answers (Q1 1.136 / Q2 0.56) only on scikit-learn 1.7.x (1.7.2, the Colab default when the
+course 2026 workbook was executed). scikit-learn 1.8.0 gives a
+slightly different Random Forest at the probability boundaries
+(pred10: 3756 trades, Q75 of daily investments 7 -> CAGR 1.1279; the
+0.56 rule averages 5.35 trades/day -> the Q2 pick jumps to 0.57).
+`main()` warns loudly if scikit-learn >= 1.8 is detected.
+`simulate()` mirrors the notebook's per-row accounting exactly: fees are
+charged from the row's perspective, so rows whose `growth_future_30d`
+is NaN (last ~21 TEST trading days) are skipped by pandas' sum in the
+gross AND net revenue, even while they still count in
+`sim1_count_investments`, avg/Q75 investments per day and the raw fees
+column sum (matches the notebook output row by row).
 """
 
 from __future__ import annotations
 
 import json
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -65,6 +80,26 @@ def _num(x, nd: int = 4):
     if not np.isfinite(f):
         return None
     return round(f, nd)
+
+
+def check_sklearn_version() -> None:
+    """Pin-friendly guard: Q1/Q2 answers were verified on scikit-learn 1.7.2."""
+    import sklearn
+
+    v = tuple(
+        int(part) for part in sklearn.__version__.split(".")[:2] if part.isdigit()
+    )
+    if v >= (1, 8):
+        warnings.warn(
+            f"scikit-learn {sklearn.__version__} >= 1.8 changes Random Forest "
+            "probability values near the decision boundaries. The official "
+            "HW4 answers (Q1 CAGR 1.136 / Q2 threshold 0.56) reproduce on "
+            "scikit-learn 1.7.x (verified on 1.7.2). On 1.8.0 you get "
+            "Q1 1.1279 / Q2 0.57 instead.",
+            RuntimeWarning,
+        )
+    else:
+        print(f"  [env] scikit-learn {sklearn.__version__} (verified generation: 1.7.x)")
 
 
 def header(title: str, first: bool = False):
@@ -303,20 +338,47 @@ def tpr_fpr_dataframe(y_true, y_pred, only_even=False) -> pd.DataFrame:
 
 
 def simulate(new_df: pd.DataFrame) -> pd.DataFrame:
-    """Notebook sim1: invest $100 on every positive TEST prediction, 0.2% round-trip fee."""
+    """Notebook sim1, per-row accounting identical to the workbook.
+
+    sim1_gross_rev / fees / net rev are per-row columns summed over the
+    TEST rows with a positive prediction. Rows whose `growth_future_30d`
+    is NaN (roughly the last 21 TEST trading days) keep a NaN net value,
+    so pandas' column sum silently drops them from gross/net revenue but
+    NOT from the raw fees column, `sim1_count_investments`, avg/Q75
+    investments per day or the Q75-based capital. This mirrors the
+    notebook output exactly (e.g. original setup pred6: gross 22383.446,
+    fees -1335.4, net 21050.646).
+    """
     preds = [k for k in new_df.columns if k.startswith("pred")]
     rows = []
     test = new_df.split == "test"
-    growth = new_df["growth_future_30d"]
     for pred in preds:
         pos = test & (new_df[pred] == 1)
         n = int(pos.sum())
-        gross = float((new_df.loc[pos, pred] * 100 * (growth[pos] - 1)).sum()) if n else 0.0
-        fees = float((-n * 100 * FEE_RATE) if n else 0.0)
-        net = gross + fees
-        daily = new_df.loc[pos].groupby("Date")[pred].count() if n else pd.Series(dtype=float)
-        avg_per_day = float(daily.mean()) if len(daily) else 0.0
-        q75_per_day = float(daily.quantile(0.75)) if len(daily) else 0.0
+        if not n:
+            rows.append(
+                {
+                    "prediction": pred,
+                    "sim1_count_investments": 0,
+                    "sim1_gross_rev": 0.0,
+                    "sim1_fees": 0.0,
+                    "sim1_net_rev": 0.0,
+                    "sim1_average_net_revenue": np.nan,
+                    "sim1_avg_investments_per_day": 0.0,
+                    "sim1_q75_investments_per_day": 0.0,
+                    "sim1_capital": 0.0,
+                    "sim1_CAGR": np.nan,
+                }
+            )
+            continue
+        growth_rows = new_df.loc[pos, "growth_future_30d"]
+        gross = float((100 * (growth_rows - 1)).sum())          # NaN rows dropped by sum
+        fees = float(-n * 100 * FEE_RATE)                       # raw fees column sum (NaN rows counted)
+        fees_in_net = float((-100 * FEE_RATE * growth_rows.notna()).sum())
+        net = gross + fees_in_net                               # notebook's net column sum
+        daily = new_df.loc[pos].groupby("Date")[pred].count()   # includes NaN-growth rows
+        avg_per_day = float(daily.mean())
+        q75_per_day = float(daily.quantile(0.75))
         capital = 100 * HOLD_DAYS * q75_per_day
         cagr = ((capital + net) / capital) ** (1 / TEST_YEARS) if capital else np.nan
         rows.append(
@@ -489,6 +551,7 @@ def q3(df_full: pd.DataFrame):
 
 
 def main():
+    check_sklearn_version()
     header("Homework 4 | load dataset", first=True)
     df_full = load_full()
     df_full["ln_volume"] = np.log(df_full.Volume + 1e-6)
@@ -502,7 +565,7 @@ def main():
         "see": "README.md",
         "summary": (
             "Size each 30-day hold by Random Forest probability (threshold ladder "
-            "0.57-0.65), cap concurrent names per day, and only deploy when the "
+            "0.56-0.65), cap concurrent names per day, and only deploy when the "
             "depth-4/10 tree agrees on the macro regime."
         ),
     }
