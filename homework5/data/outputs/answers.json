@@ -1,0 +1,23 @@
+{
+  "homework": "hw05",
+  "cohort": "2026",
+  "course": "stock-markets-analytics-zoomcamp",
+  "module": "Module 5 - Research ideas (exploratory)",
+  "answers": [
+    {
+      "question": "Q1",
+      "title": "Cross-exchange relative value: NYSE ADSs vs Hong Kong primary listings (BABA/9988.HK pilot)",
+      "summary": "Market-neutral pairs trade between the fully fungible BABA ADS (1 ADS = 8 ordinary shares, ~2-day two-way conversion via Citibank) and 9988.HK; trade only fat-tail dislocations from one-side-only sessions, rebalances and borrow/stamp frictions at |z| >= 2 with a 10-session time stop. Costs are the gate: HK stamp duty 0.1% per side (since 17 Nov 2023) plus borrow. Reject if net-of-cost expectancy <= 0 or half-life > 15 sessions."
+    },
+    {
+      "question": "Q2",
+      "title": "Weekly demand proxies to anticipate US advertising-platform revenue (META, GOOGL, TTD, APP)",
+      "summary": "Ad budgets react to observable consumer demand weekly but are reported quarterly. Free proxies - Google Trends demand lens, new-campaign counts from Meta/Google transparency libraries (election-cycle dummies), app-store rank momentum - lagged 4-10 weeks predict relative quarterly revenue surprises; trade top-vs-bottom ranks into the next print against an equal-weight basket. Kill the idea if the lagged signals only echo last quarter."
+    },
+    {
+      "question": "Q3",
+      "title": "Panic vs permanent damage: post-crash reversal in US small/mid caps filtered by an SEC event taxonomy",
+      "summary": "Single-day falls >= 10% on >= 3x average volume are classified by the free EDGAR trail (guidance cut vs dilution vs going-concern/fraud language vs clinical miss). Only 'discrete recoverable setback' types are bought, 1-2.5% per event, 10-day time stop, second-systemic-event veto, index-stress pause. Must beat unconditional dip-buying and survive regime and survivorship checks."
+    }
+  ]
+}
