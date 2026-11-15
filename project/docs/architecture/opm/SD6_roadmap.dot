@@ -1,0 +1,36 @@
+// SD6 · Roadmap: PLANNED processes (dotted) and where they attach to the implemented model.
+// Rule: a planned thing becomes solid only when its code, test and OPL sentence land together.
+digraph SD6 {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.4, ranksep=0.8,
+         label="SD6 · Roadmap · dotted = PLANNED, solid = implemented anchor"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#e6e6e6"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  // implemented anchors
+  acquiring    [shape=ellipse, fillcolor="#cfe2ff", label="Acquiring (SD1)"];
+  transforming [shape=ellipse, label="Transforming (SD2)"];
+  researching  [shape=ellipse, fillcolor="#ffe0b3", label="Researching (SD3)"];
+  signalling   [shape=ellipse, fillcolor="#fff3b0", label="Signalling (SD4)"];
+  serving      [shape=ellipse, fillcolor="#d1f0d1", label="Serving (SD5)"];
+  universe     [shape=box, fillcolor="#cfe2ff", label="universe"];
+  report       [shape=box, fillcolor="#ffe0b3", label="Backtest Report"];
+  book         [shape=box, fillcolor="#fff3b0", label="Signal Book"];
+
+  // planned things
+  r1 [shape=ellipse, style="filled,dotted", fillcolor="#f2f2f2", label="R1 Loading Historical Membership\n(S&P add/remove tables + delisted prices;\nremoves survivorship bias)"];
+  r1o [shape=box, style="filled,dotted", fillcolor="#f2f2f2", label="membership_history\n(ticker, start, end)"];
+  r2 [shape=ellipse, style="filled,dotted", fillcolor="#f2f2f2", label="R2 Walk-forward Retraining\n(expanding window, yearly refit,\nout-of-sample stitched equity)"];
+  r3 [shape=ellipse, style="filled,dotted", fillcolor="#f2f2f2", label="R3 Notifying\n(Telegram / email push of\nSTRONG_BUY + BUY after each run)"];
+  r4 [shape=ellipse, style="filled,dotted", fillcolor="#f2f2f2", label="R4 Classifying Filing Text\n(8-K EX-99.1 guidance-cut language,\ngoing-concern phrases)"];
+  r5 [shape=ellipse, style="filled,dotted", fillcolor="#f2f2f2", label="R5 Cloud Deploying the API\n(container on a VM / Cloud Run;\nbatch CD + Pages already in SD7)"];
+  r6 [shape=ellipse, style="filled,dotted", fillcolor="#f2f2f2", label="R6 Confirming Intraday Entry\n(guide Entry B: reclaim prior high /\nVWAP with intraday bars)"];
+  r7 [shape=ellipse, style="filled,dotted", fillcolor="#f2f2f2", label="R7 Extending to Other Markets\n(guide Variant A for eligible\nChina A-shares, rule-aware ledger)"];
+
+  r1 -> r1o; r1o -> acquiring [arrowhead=odot]; r1 -> universe [dir=both, style=dotted];
+  researching -> r2 [style=dashed]; r2 -> report [dir=both, style=dotted];
+  signalling -> r3 [style=dashed, label="[after publish]"]; book -> r3 [arrowhead=odot];
+  r4 -> transforming [style=dashed];
+  r5 -> serving [style=dotted, dir=both];
+  r6 -> signalling [style=dashed];
+  r7 -> transforming [style=dashed];
+}

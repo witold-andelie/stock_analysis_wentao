@@ -1,0 +1,5 @@
+# Mon-Fri 22:30 New York time (after US close + vendor data settles).
+# cron uses the system timezone: either set CRON_TZ (cronie/Vixie) as below, or convert
+# 22:30 ET to your local time (macOS cron ignores CRON_TZ: use local time).
+CRON_TZ=America/New_York
+30 22 * * 1-5 /path/to/project/scripts/run_daily.sh

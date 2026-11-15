@@ -1,0 +1,36 @@
+x-common: &common
+  build: .
+  env_file: .env
+  restart: unless-stopped
+  volumes:
+    - driftrev-data:/data
+
+services:
+  api:
+    <<: *common
+    command: uvicorn driftrev.api:app --host 0.0.0.0 --port 8000
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  mcp:
+    <<: *common
+    command: python -m driftrev.mcp_server --transport streamable-http --host 0.0.0.0 --port 8001
+    ports: ["8001:8001"]
+  dashboard:
+    <<: *common
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+    ports: ["8501:8501"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  scheduler:
+    <<: *common
+    command: python -m driftrev.scheduler
+
+volumes:
+  driftrev-data:

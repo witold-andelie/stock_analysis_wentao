@@ -1,0 +1,62 @@
+# OPM SD7 · Integrating (CI): every push / PR touching the project must keep the build passing.
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["project/**", ".github/workflows/**"]
+  pull_request:
+    paths: ["project/**", ".github/workflows/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: project
+
+jobs:
+  test:
+    name: tests + OPM model
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: project/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Unit + API + CI-contract tests
+        run: PYTHONPATH=src python -m pytest tests -q
+      - name: OPM diagrams render (model-first rule, AGENTS.md)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq graphviz
+          python scripts/render_opm.py
+          for f in docs/architecture/opm/*.dot; do
+            stem=$(basename "$f" .dot)
+            [ "$stem" = legend ] && continue
+            grep -q "$stem.dot" docs/architecture/opm/OPL.md || { echo "::error::$stem.dot has no OPL section"; exit 1; }
+          done
+      - name: Notebooks are valid JSON
+        run: python -c "import nbformat,glob; [nbformat.validate(nbformat.read(p, as_version=4)) for p in glob.glob('notebooks/*.ipynb')]; print('ok')"
+
+  docker:
+    name: container build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose file is valid
+        run: cp .env.example .env && docker compose config -q
+      - name: Build image and import the package inside it
+        run: |
+          docker build -t driftrev:ci .
+          docker run --rm driftrev:ci python -c "import driftrev.pipeline, driftrev.api, driftrev.mcp_server, lightgbm, xgboost; print('image ok')"

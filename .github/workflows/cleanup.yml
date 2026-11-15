@@ -1,0 +1,32 @@
+# OPM SD7 · Garbage-collecting GitHub: delete expired caches, artifacts, runs and old snapshot assets.
+# Retention days come from config.Retention (tests/test_cicd.py keeps them in sync).
+name: cleanup
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"      # weekly, Monday 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what would be deleted"
+        type: boolean
+        default: false
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete expired GitHub-side data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_CACHE_DAYS: "3"
+          GH_ARTIFACT_DAYS: "30"
+          GH_RUN_DAYS: "30"
+        run: project/scripts/gh_cleanup.sh ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -1,0 +1,135 @@
+# OPM SD7 · Delivering (CD): incremental update -> signals -> results site, every trading day.
+# Data never enters git: the warehouse lives in the Actions cache, outputs in expiring artifacts,
+# the weekly snapshot in one rolling Release asset. First run (empty cache) bootstraps everything.
+name: daily-signals
+
+on:
+  schedule:
+    - cron: "30 3 * * 2-6"   # 03:30 UTC Tue-Sat = 22:30 ET (EST) / 23:30 ET (EDT) after Mon-Fri closes
+    - cron: "0 12 * * 0"     # Sunday 12:00 UTC: retrain + backtests + snapshot release
+  workflow_dispatch:
+    inputs:
+      retrain:
+        description: "Refit models and recompute all backtests"
+        type: boolean
+        default: false
+      tune:
+        description: "Re-run the hyper-parameter grid search (slow)"
+        type: boolean
+        default: false
+      max_tickers:
+        description: "Limit the universe (0 = all S&P 1500; e.g. 60 for a quick test)"
+        default: "0"
+
+permissions:
+  contents: write      # snapshot release asset
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: daily-signals
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: project
+
+env:
+  DRIFTREV_DATA_DIR: ${{ github.workspace }}/project/data
+  DRIFTREV_MAX_TICKERS: ${{ inputs.max_tickers || '0' }}
+  SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+  PYTHONPATH: src
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    outputs:
+      data_through: ${{ steps.pipe.outputs.data_through }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: project/requirements.txt
+      - run: pip install -r requirements.txt
+
+      - name: Restore data cache (warehouse + model artifacts)
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            project/data/warehouse.duckdb
+            project/data/artifacts
+          key: driftrev-data-${{ github.run_id }}
+          restore-keys: driftrev-data-
+
+      - name: Decide retrain
+        id: mode
+        run: |
+          flags=""
+          if [ "${{ github.event.schedule }}" = "0 12 * * 0" ] || [ "${{ inputs.retrain }}" = "true" ] \
+             || [ ! -f data/artifacts/model.joblib ]; then flags="--retrain"; fi
+          if [ "${{ inputs.tune }}" = "true" ]; then flags="$flags --tune"; fi
+          [ -z "${SEC_USER_AGENT}" ] && echo "::warning::secret SEC_USER_AGENT not set; using the generic default User-Agent"
+          echo "flags=$flags" >> "$GITHUB_OUTPUT"
+          echo "cache hit: ${{ steps.restore.outputs.cache-matched-key || 'none (full bootstrap)' }}"
+
+      - name: Pipeline (incremental download -> transform -> score -> report -> housekeeping)
+        id: pipe
+        run: |
+          python -m driftrev.pipeline --mode update ${{ steps.mode.outputs.flags }} | tee data/pipeline_result.json
+          echo "data_through=$(python -c "import json;print(json.load(open('data/artifacts/metrics.json'))['data_through'])")" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        if: always()
+        run: cat data/site/summary.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no summary" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save data cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            project/data/warehouse.duckdb
+            project/data/artifacts
+          key: driftrev-data-${{ github.run_id }}
+
+      - name: Upload run artifact (expires automatically)
+        uses: actions/upload-artifact@v4
+        with:
+          name: driftrev-results-${{ steps.pipe.outputs.data_through }}-${{ github.run_id }}
+          retention-days: 30
+          path: |
+            project/data/site
+            project/data/artifacts/*.parquet
+            project/data/artifacts/metrics.json
+            project/data/artifacts/run_log.jsonl
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: project/data/site
+          retention-days: 7
+
+      - name: Release weekly snapshot (for --mode file), replacing the previous asset
+        if: github.event.schedule == '0 12 * * 0' || inputs.retrain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip=$(python -m driftrev.pipeline snapshot | tail -1)
+          gh release view data-snapshot >/dev/null 2>&1 || \
+            gh release create data-snapshot --title "Data snapshot (rolling)" \
+              --notes "Latest parquet snapshot for 'python -m driftrev.pipeline --mode file'. Replaced weekly by CI; older assets are deleted."
+          gh release upload data-snapshot "$zip" --clobber
+
+  deploy-pages:
+    needs: run
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

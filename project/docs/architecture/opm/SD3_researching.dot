@@ -1,0 +1,52 @@
+// SD3 · Researching in-zoomed: feature sets -> tuning -> final fit -> simulation -> evaluation.
+digraph SD3 {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.35, ranksep=0.6,
+         label="SD3 · Researching (in-zoomed) · pipeline.train_and_backtest · TEST is touched once, after every choice is fixed on VALIDATION"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#ffe0b3"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  events [shape=box, fillcolor="#e6e6e6", label="Event Dataset"];
+  panel  [shape=box, fillcolor="#e6e6e6", label="Daily Panel"];
+  market [shape=box, fillcolor="#cfe2ff", label="market (SPY, IWM)"];
+  costs  [shape=box, label="Cost Model\n(15 bps one-way; stress 2x, 3x)"];
+
+  ml [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#e6e6e6">
+      <TR><TD BORDER="0" COLSPAN="4"><B>ML Frame</B> (TO_PREDICT · NUMERIC · DUMMIES) — split</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">train ≤ 2021</TD><TD STYLE="rounded" BGCOLOR="white">validation 2022-23</TD><TD STYLE="rounded" BGCOLOR="white">test 2024 →</TD><TD STYLE="rounded" BGCOLOR="white">live (no target)</TD></TR>
+    </TABLE>>];
+
+  p_prep [shape=ellipse, fillcolor="#e6e6e6", label="Preparing Feature Sets\n(dataset.prepare: bins, dummies,\ntemporal split)"];
+  p_rules [shape=ellipse, label="Applying Hand Rules\n(HW1 PEAD+momentum, HW5 panic,\nall events, guide arms A/B/C)"];
+  p_tune [shape=ellipse, label="Tuning\n(grid per family on TRAIN,\nscored by VALIDATION precision@top10%)"];
+  p_fit  [shape=ellipse, label="Fitting Final Models\n(TRAIN+VALIDATION refit; tree, RF,\nXGB, LGBM, logreg, ensemble)"];
+  p_thr  [shape=ellipse, label="Choosing Thresholds\n(VALIDATION, ≥ 5% of events)"];
+  p_sel  [shape=ellipse, label="Selecting Production Model\n(best VALIDATION AUC)"];
+  p_vec  [shape=ellipse, label="Vector Simulating\n(sim1 hold, sim2 SL/TP)"];
+  p_ex   [shape=ellipse, penwidth=2, label="Exact Simulating\n(daily loop, reinvestment, max positions,\nfixed-% or guide ATR/R framework)"];
+  p_bm   [shape=ellipse, label="Benchmarking\n(SPY, IWM buy & hold,\nHW1 momentum top quintile)"];
+  p_arm  [shape=ellipse, label="Testing Guide Arms\n(A → B → C causal test,\nsensitivity, cost stress)"];
+  p_diag [shape=ellipse, label="Diagnosing\n(precision by family / cause / sector /\nsize / year / regime; false positives)"];
+
+  tuning [shape=box, label="Tuning Table\n(tuning.parquet)"];
+  bundle [shape=box, style="filled,bold", penwidth=2, label="Model Bundle\n(model.joblib)"];
+  preds  [shape=box, label="Predictions\n(proba_*, pred* columns)"];
+  report [shape=box, style="filled,bold", penwidth=2, label="Backtest Report\n(metrics.json strategies, benchmarks,\nguide; trades; equity; breakdown;\nimportance; calibration)"];
+  verdict [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#ffe0b3">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Window-Release Factor</B> (key causal test)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">kept</TD><TD STYLE="rounded" BGCOLOR="white">discarded</TD></TR>
+    </TABLE>>];
+
+  events -> p_prep; p_prep -> ml;
+  ml -> p_rules [arrowhead=odot]; p_rules -> preds;
+  ml -> p_tune [arrowhead=odot]; p_tune -> tuning;
+  tuning -> p_fit [arrowhead=odot]; ml -> p_fit [arrowhead=odot]; p_fit -> preds;
+  preds -> p_thr [arrowhead=odot]; p_thr -> preds [dir=both, label="pred*_best_rule_NN"];
+  p_thr -> p_sel [style=dashed]; p_sel -> bundle;
+  preds -> p_vec [arrowhead=odot]; costs -> p_vec [arrowhead=odot]; p_vec -> report;
+  preds -> p_ex [arrowhead=odot]; panel -> p_ex [arrowhead=odot]; costs -> p_ex [arrowhead=odot]; p_ex -> report;
+  market -> p_bm [arrowhead=odot]; panel -> p_bm [arrowhead=odot]; p_bm -> report;
+  p_ex -> p_arm [style=dashed]; ml -> p_arm [arrowhead=odot]; p_arm -> report; p_arm -> verdict [dir=both];
+  preds -> p_diag [arrowhead=odot]; p_diag -> report;
+}

@@ -1,0 +1,87 @@
+// SD0 · System diagram (top level). The system's function is Signalling Event Trades.
+digraph SD0 {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.45, ranksep=0.95,
+         label="SD0 · Drift-or-Reversal system diagram (function: Signalling Event Trades)"];
+  node  [fontname="Helvetica", fontsize=11, style=filled, fillcolor="#e6e6e6"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  // ---------- environmental objects ----------
+  providers [shape=box, style="filled,dashed", fillcolor="#ffffff",
+             label="Public Data Providers\n(Yahoo Finance, FRED, SEC EDGAR,\nWikimedia pageviews, Wikipedia S&P lists)"];
+  researcher [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Researcher / Investor\n(human)"];
+  agent      [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Personal 24/7 Agent\n(Grok bot, Claude, n8n ...)"];
+  clock      [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Market Calendar\n(22:30 America/New_York, Mon-Fri)"];
+  github     [shape=box, style="filled,dashed", fillcolor="#ffffff", label="GitHub Actions + Pages\n(CI/CD, SD7)"];
+  alpaca     [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Alpaca Broker\n(paper by default)"];
+
+  // ---------- system objects ----------
+  system    [shape=box, penwidth=2, label="Drift-or-Reversal\n(system)"];
+  warehouse [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#cfe2ff">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Warehouse</B> (DuckDB)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">stale</TD><TD STYLE="rounded" BGCOLOR="white">current</TD></TR>
+    </TABLE>>];
+  dataset   [shape=box, label="Event Dataset\n(+ Daily Panel, Market Context)"];
+  modelb    [shape=box, fillcolor="#ffe0b3", label="Model Bundle\n(model.joblib, threshold)"];
+  backtest  [shape=box, fillcolor="#ffe0b3", label="Backtest Report\n(metrics.json, trades, equity,\nguide report card)"];
+  signals   [shape=box, fillcolor="#fff3b0", label="Signal Book\n(signals_latest, events_recent)"];
+  snapshot  [shape=box, style="filled,bold", label="Snapshot\n(parquet zip on Drive/S3)"];
+  runlog    [shape=box, fillcolor="#fff3b0", label="Run Log\n(run_log.jsonl)"];
+  iface     [shape=box, style="filled,bold", fillcolor="#d1f0d1", label="Agent Interface\n(REST + OpenAPI, tools.json, MCP)"];
+  orders    [shape=box, fillcolor="#ead7ff", label="Order Set\n(preview / submitted)"];
+
+  // ---------- processes ----------
+  acquiring    [shape=ellipse, fillcolor="#cfe2ff", label="Acquiring"];
+  transforming [shape=ellipse, fillcolor="#e6e6e6", label="Transforming"];
+  researching  [shape=ellipse, fillcolor="#ffe0b3", label="Researching\n(training + backtesting)"];
+  signalling   [shape=ellipse, penwidth=2, fillcolor="#fff3b0", label="Signalling\nEvent Trades"];
+  scheduling   [shape=ellipse, fillcolor="#ead7ff", label="Scheduling"];
+  serving      [shape=ellipse, fillcolor="#d1f0d1", label="Serving"];
+  monitoring   [shape=ellipse, fillcolor="#d1f0d1", label="Monitoring"];
+  trading      [shape=ellipse, fillcolor="#ead7ff", label="Trading"];
+
+  // ---------- structural ----------
+  exh [shape=triangle, style=filled, fillcolor=white, peripheries=2, label="", width=0.25, height=0.22];
+  system -> exh -> signalling [arrowhead=none];
+
+  // ---------- procedural ----------
+  clock -> scheduling [arrowhead=dot];
+  github -> scheduling [arrowhead=dot, label="[daily.yml]"];
+  scheduling -> acquiring [style=dashed, label="invokes\n[--mode update]"];
+  providers -> acquiring [arrowhead=odot];
+  acquiring -> warehouse [dir=both, label="stale → current"];
+
+  warehouse -> transforming [arrowhead=odot];
+  snapshot -> transforming [arrowhead=odot, label="[--mode file]"];
+  transforming -> dataset;
+  transforming -> snapshot [label="[snapshot]"];
+
+  dataset -> researching [arrowhead=odot];
+  researcher -> researching [arrowhead=dot, label="[--retrain]"];
+  researching -> modelb;
+  researching -> backtest;
+
+  dataset -> signalling [arrowhead=odot];
+  modelb  -> signalling [arrowhead=odot];
+  signalling -> signals;
+  signalling -> runlog;
+
+  agent -> serving [arrowhead=dot];
+  iface -> serving [arrowhead=odot];
+  signals -> serving [arrowhead=odot];
+  backtest -> serving [arrowhead=odot];
+  runlog -> serving [arrowhead=odot];
+  serving -> acquiring [style=dashed, label="invokes\n[POST /v1/pipeline/run]"];
+  serving -> trading [style=dashed, label="invokes\n[POST /v1/orders/*]"];
+
+  researcher -> monitoring [arrowhead=dot];
+  signals -> monitoring [arrowhead=odot];
+  backtest -> monitoring [arrowhead=odot];
+
+  signals -> trading [arrowhead=odot];
+  alpaca -> trading [arrowhead=odot];
+  trading -> orders;
+
+  { rank=same; researcher; agent; }
+  { rank=same; signals; backtest; runlog; }
+}

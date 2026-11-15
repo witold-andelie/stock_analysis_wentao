@@ -1,0 +1,67 @@
+// OPM legend for every diagram in this folder (ISO/PAS 19450 notation drawn with Graphviz).
+// Render all diagrams: PYTHONPATH=src .venv/bin/python scripts/render_opm.py
+digraph legend {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.35, ranksep=0.5,
+         label="OPM legend · Drift-or-Reversal · things, links and owner colours"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#e6e6e6"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  subgraph cluster_things {
+    label="Things"; style=rounded; color="#999999";
+    obj   [shape=box, label="Object\n(informational)"];
+    phys  [shape=box, style="filled,bold", label="Physical object\n(file / database / service)"];
+    env   [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Environmental object\n(outside the system)"];
+    proc  [shape=ellipse, label="Process"];
+    eproc [shape=ellipse, style="filled,dashed", fillcolor="#ffffff", label="Environmental process"];
+    st    [shape=plain, style="", label=<
+      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#e6e6e6">
+        <TR><TD BORDER="0" COLSPAN="2"><B>Object with states</B></TD></TR>
+        <TR><TD STYLE="rounded" BGCOLOR="white">state a</TD><TD STYLE="rounded" BGCOLOR="white">state b</TD></TR>
+      </TABLE>>];
+  }
+
+  subgraph cluster_proc_links {
+    label="Procedural links"; style=rounded; color="#999999";
+    c1 [shape=box, label="Object"];  c2 [shape=ellipse, label="Process"];
+    c1 -> c2 [label="consumption"];
+    r1 [shape=ellipse, label="Process"]; r2 [shape=box, label="Object"];
+    r1 -> r2 [label="result"];
+    e1 [shape=ellipse, label="Process"]; e2 [shape=box, label="Object"];
+    e1 -> e2 [dir=both, label="effect\n(state change)"];
+    a1 [shape=box, label="Agent\n(human / scheduler / AI agent)"]; a2 [shape=ellipse, label="Process"];
+    a1 -> a2 [arrowhead=dot, label="agent"];
+    i1 [shape=box, label="Instrument"]; i2 [shape=ellipse, label="Process"];
+    i1 -> i2 [arrowhead=odot, label="instrument"];
+    k1 [shape=box, label="Condition\nobject"]; k2 [shape=ellipse, label="Process"];
+    k1 -> k2 [arrowhead=odot, style=bold, label="condition [c]\n(skip if false)"];
+    v1 [shape=ellipse, label="Process"]; v2 [shape=ellipse, label="Process"];
+    v1 -> v2 [style=dashed, label="invocation\n[trigger]"];
+  }
+
+  subgraph cluster_struct_links {
+    label="Structural links"; style=rounded; color="#999999";
+    w  [shape=box, label="Whole"];
+    ag [shape=triangle, style=filled, fillcolor=black, label="", width=0.25, height=0.22];
+    p  [shape=box, label="Part"];
+    w -> ag -> p [arrowhead=none];
+    o  [shape=box, label="Exhibitor"];
+    ex [shape=triangle, style=filled, fillcolor=white, peripheries=2, label="", width=0.25, height=0.22];
+    f  [shape=box, label="Attribute /\noperation"];
+    o -> ex -> f [arrowhead=none];
+    g  [shape=box, label="General"];
+    ge [shape=triangle, style=filled, fillcolor=white, label="", width=0.25, height=0.22];
+    s  [shape=box, label="Specialisation"];
+    g -> ge -> s [arrowhead=none];
+  }
+
+  subgraph cluster_owners {
+    label="Fill colour = which module implements it"; style=rounded; color="#999999";
+    o_ing  [shape=box, fillcolor="#cfe2ff", label="Ingestion\nuniverse · prices · macro\nedgar · attention · store"];
+    o_tr   [shape=box, fillcolor="#e6e6e6", label="Transformation\nfeatures · indicators\nrolling_window · dataset"];
+    o_res  [shape=box, fillcolor="#ffe0b3", label="Research\nmodels · simulate\nanalysis"];
+    o_sig  [shape=box, fillcolor="#fff3b0", label="Signalling\nsignals · pipeline\nartifacts"];
+    o_srv  [shape=box, fillcolor="#d1f0d1", label="Serving\napi · mcp_server · service\nagent_tools · dashboard"];
+    o_brk  [shape=box, fillcolor="#ead7ff", label="Execution & ops\nbroker · scheduler\nDocker · cron"];
+    o_plan [shape=box, style="filled,dotted", fillcolor="#f2f2f2", label="PLANNED\n(not implemented yet)"];
+  }
+}

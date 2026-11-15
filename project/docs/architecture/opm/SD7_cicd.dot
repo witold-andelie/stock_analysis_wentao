@@ -1,0 +1,69 @@
+// SD7 · Integrating & Delivering (CI/CD on GitHub Actions) and Housekeeping (data retention).
+// Invariant: no data file is ever committed to git. Data lives in the Actions cache (warehouse),
+// in expiring workflow artifacts, and in one rolling Release asset (snapshot for --mode file).
+digraph SD7 {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.4, ranksep=0.85,
+         label="SD7 · CI/CD on GitHub Actions + Housekeeping · .github/workflows/{ci,daily,cleanup}.yml · driftrev.housekeeping · driftrev.report"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#ead7ff"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  // environmental
+  dev    [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Developer\n(push / pull request)"];
+  cron   [shape=box, style="filled,dashed", fillcolor="#ffffff", label="GitHub Scheduler\n(cron, UTC)"];
+  gha    [shape=box, style="filled,dashed", fillcolor="#ffffff", label="GitHub Actions runner\n(ubuntu, Python 3.11)"];
+  secret [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Repository Secrets\n(SEC_USER_AGENT)"];
+  provid [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Public Data Providers"];
+
+  // objects
+  code   [shape=box, style="filled,bold", fillcolor="#e6e6e6", label="Source Code + OPM model\n(git: project/**)"];
+  build  [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#ead7ff">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Build Status</B></TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">passing</TD><TD STYLE="rounded" BGCOLOR="white">failing</TD></TR>
+    </TABLE>>];
+  cache  [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#cfe2ff">
+      <TR><TD BORDER="0" COLSPAN="3"><B>Data Cache</B> (actions/cache: warehouse + artifacts)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">missing</TD><TD STYLE="rounded" BGCOLOR="white">fresh</TD><TD STYLE="rounded" BGCOLOR="white">expired</TD></TR>
+    </TABLE>>];
+  runart [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#fff3b0">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Run Artifact</B> (signals, metrics, report; retention-days)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">retained</TD><TD STYLE="rounded" BGCOLOR="white">expired</TD></TR>
+    </TABLE>>];
+  site   [shape=box, style="filled,bold", fillcolor="#d1f0d1", label="Results Site\n(GitHub Pages: index.html,\nsignals.json, metrics.json)"];
+  summ   [shape=box, fillcolor="#d1f0d1", label="Job Summary\n(markdown in the run page)"];
+  snap   [shape=box, style="filled,bold", fillcolor="#cfe2ff", label="Snapshot Release Asset\n(tag data-snapshot, latest only)"];
+  policy [shape=box, label="Retention Policy\n(config.Retention: days per file class)"];
+  local  [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#cfe2ff">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Data Files</B> (data/: edgar cache, history, logs, zips)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">current</TD><TD STYLE="rounded" BGCOLOR="white">deleted</TD></TR>
+    </TABLE>>];
+
+  // processes
+  p_int  [shape=ellipse, penwidth=2, label="Integrating (CI)\npytest · OPM render check ·\ncompose config · docker build"];
+  p_del  [shape=ellipse, penwidth=2, label="Delivering (CD daily)\nrestore cache → pipeline --mode update\n[Sunday: --retrain] → report"];
+  p_rep  [shape=ellipse, fillcolor="#fff3b0", label="Reporting\n(driftrev.report: HTML + markdown)"];
+  p_pub  [shape=ellipse, fillcolor="#d1f0d1", label="Publishing Results\n(Pages deploy, job summary,\nupload-artifact)"];
+  p_snap [shape=ellipse, fillcolor="#cfe2ff", label="Releasing Snapshot\n(weekly, replaces previous asset)"];
+  p_hk   [shape=ellipse, label="Housekeeping Data Files\n(driftrev.housekeeping)"];
+  p_gc   [shape=ellipse, label="Garbage-collecting GitHub\n(cleanup.yml: caches, artifacts,\nworkflow runs, old assets)"];
+  p_sig  [shape=ellipse, fillcolor="#fff3b0", label="Signalling Event Trades\n(SD4)"];
+
+  dev -> p_int [arrowhead=dot]; gha -> p_int [arrowhead=odot]; code -> p_int [arrowhead=odot];
+  p_int -> build [dir=both];
+  cron -> p_del [arrowhead=dot, label="[22:30 ET Mon-Fri, Sun retrain]"];
+  build -> p_del [arrowhead=odot, style=bold, label="[passing on main]"];
+  gha -> p_del [arrowhead=odot]; secret -> p_del [arrowhead=odot]; provid -> p_del [arrowhead=odot];
+  cache -> p_del [dir=both, label="missing → full bootstrap;\nfresh → incremental"];
+  p_del -> p_sig [style=dashed, label="invokes"];
+  p_sig -> p_rep [style=dashed]; p_rep -> p_pub [style=dashed];
+  p_pub -> site; p_pub -> summ; p_pub -> runart [label="retained (30 d)"];
+  p_del -> p_snap [style=dashed, label="[Sunday]"]; p_snap -> snap [dir=both];
+  p_del -> p_hk [style=dashed, label="[after publish]"];
+  policy -> p_hk [arrowhead=odot]; p_hk -> local [dir=both, label="current → deleted"];
+  cron -> p_gc [arrowhead=dot, label="[weekly]"]; policy -> p_gc [arrowhead=odot];
+  p_gc -> cache [dir=both, label="→ expired (deleted)"]; p_gc -> runart [dir=both, label="→ expired (deleted)"];
+  p_gc -> snap [dir=both, label="keep latest"];
+}

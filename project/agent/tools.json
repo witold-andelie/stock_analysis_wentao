@@ -1,0 +1,260 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_latest_signals",
+      "description": "Get the newest actionable trade signals (ranked by probability) with market regime and a plain-English summary.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "min_prob": {
+            "type": "number",
+            "description": "Minimum probability 0-1"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "STRONG_BUY",
+              "BUY",
+              "WATCH",
+              "SKIP",
+              "AVOID",
+              "NO_CALL"
+            ]
+          },
+          "event_family": {
+            "type": "string",
+            "enum": [
+              "earnings",
+              "shock"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max rows (default 20)"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_recent_events",
+      "description": "List recent earnings/crash events with model probabilities.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "description": "Lookback days (default 30)"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "event_family": {
+            "type": "string",
+            "enum": [
+              "earnings",
+              "shock"
+            ]
+          },
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_ticker",
+      "description": "Get details for one ticker: universe info, recent prices, events, signals and any open signal.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Ticker symbol, e.g. AAPL"
+          }
+        },
+        "required": [
+          "ticker"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_backtest_summary",
+      "description": "Get out-of-sample backtest metrics for the strategies and benchmarks.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_backtest_trades",
+      "description": "List simulated backtest trades, newest first.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_backtest_equity",
+      "description": "Get equity curves of the strategies (weekly by default).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string"
+          },
+          "weekly": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_model_info",
+      "description": "Get model metrics, top feature importances and precision breakdown.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "top_n": {
+            "type": "integer"
+          },
+          "dimension": {
+            "type": "string",
+            "description": "Filter breakdown by dimension"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_regime",
+      "description": "Get the market fragility regime state and triggers.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_pipeline",
+      "description": "Start the data update + scoring pipeline in the background; returns a job_id. Takes minutes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "update",
+              "file"
+            ]
+          },
+          "retrain": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_job_status",
+      "description": "Check the status of a pipeline job.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_runs",
+      "description": "Get the recent pipeline run log.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "preview_orders",
+      "description": "Dry-run: show the bracket orders that would be placed for current BUY signals. Sends nothing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "max_positions": {
+            "type": "integer"
+          },
+          "capital": {
+            "type": "number"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_portfolio",
+      "description": "Get the broker account equity and positions (paper by default).",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  }
+]

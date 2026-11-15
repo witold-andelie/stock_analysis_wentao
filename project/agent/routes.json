@@ -1,0 +1,54 @@
+{
+  "get_latest_signals": {
+    "method": "GET",
+    "path": "/v1/signals/latest"
+  },
+  "get_recent_events": {
+    "method": "GET",
+    "path": "/v1/events/recent"
+  },
+  "get_ticker": {
+    "method": "GET",
+    "path": "/v1/tickers/{ticker}"
+  },
+  "get_backtest_summary": {
+    "method": "GET",
+    "path": "/v1/backtest/summary"
+  },
+  "get_backtest_trades": {
+    "method": "GET",
+    "path": "/v1/backtest/trades"
+  },
+  "get_backtest_equity": {
+    "method": "GET",
+    "path": "/v1/backtest/equity"
+  },
+  "get_model_info": {
+    "method": "GET",
+    "path": "/v1/model"
+  },
+  "get_regime": {
+    "method": "GET",
+    "path": "/v1/regime"
+  },
+  "run_pipeline": {
+    "method": "POST",
+    "path": "/v1/pipeline/run"
+  },
+  "get_job_status": {
+    "method": "GET",
+    "path": "/v1/jobs/{job_id}"
+  },
+  "get_runs": {
+    "method": "GET",
+    "path": "/v1/runs"
+  },
+  "preview_orders": {
+    "method": "POST",
+    "path": "/v1/orders/preview"
+  },
+  "get_portfolio": {
+    "method": "GET",
+    "path": "/v1/portfolio"
+  }
+}

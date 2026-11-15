@@ -1,0 +1,65 @@
+// SD5 · Serving, Monitoring, Scheduling and Trading in-zoomed (the 24/7 agent surface).
+digraph SD5 {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.4, ranksep=0.85,
+         label="SD5 · Serving / Monitoring / Scheduling / Trading (in-zoomed) · consumers read the Artifact Store only, never the Warehouse"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#d1f0d1"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  agent  [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Personal 24/7 Agent\n(Grok via xAI API, MCP clients)"];
+  human  [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Researcher / Investor"];
+  clock  [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Market Calendar"];
+  alpaca [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Alpaca API\n(paper)"];
+  xai    [shape=box, style="filled,dashed", fillcolor="#ffffff", label="xAI chat completions\n(OpenAI-compatible)"];
+
+  token  [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#d1f0d1">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Request</B> (bearer token)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">authorised</TD><TD STYLE="rounded" BGCOLOR="white">rejected</TD></TR>
+    </TABLE>>];
+  arts   [shape=box, fillcolor="#fff3b0", label="Artifact Store"];
+  iface  [shape=box, style="filled,bold", label="Agent Interface"];
+  agg [shape=triangle, style=filled, fillcolor=black, label="", width=0.25, height=0.22];
+  rest   [shape=box, label="REST API + OpenAPI\n(driftrev.api, :8000)"];
+  tools  [shape=box, label="tools.json + routes.json\n(function calling)"];
+  mcp    [shape=box, label="MCP server\n(stdio / streamable-http :8001)"];
+  dash   [shape=box, label="Dashboard\n(Streamlit :8501)"];
+  job    [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#ead7ff">
+      <TR><TD BORDER="0" COLSPAN="4"><B>Pipeline Job</B></TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">queued</TD><TD STYLE="rounded" BGCOLOR="white">running</TD><TD STYLE="rounded" BGCOLOR="white">success</TD><TD STYLE="rounded" BGCOLOR="white">failed</TD></TR>
+    </TABLE>>];
+  orders [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#ead7ff">
+      <TR><TD BORDER="0" COLSPAN="3"><B>Order Set</B></TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">previewed</TD><TD STYLE="rounded" BGCOLOR="white">submitted</TD><TD STYLE="rounded" BGCOLOR="white">refused</TD></TR>
+    </TABLE>>];
+  guard  [shape=box, fillcolor="#ead7ff", label="Order Guard\n(confirm=true AND\nDRIFTREV_ALLOW_ORDERS=true)"];
+
+  iface -> agg [arrowhead=none]; agg -> rest [arrowhead=none]; agg -> tools [arrowhead=none]; agg -> mcp [arrowhead=none];
+
+  p_auth  [shape=ellipse, label="Authenticating\n(security.check_bearer,\nconstant-time compare)"];
+  p_query [shape=ellipse, penwidth=2, label="Answering Queries\n(service.*: signals, events, ticker,\nbacktest, model, regime, runs)"];
+  p_brief [shape=ellipse, label="Briefing\n(grok_agent_example tool loop)"];
+  p_mon   [shape=ellipse, label="Monitoring\n(dashboard tabs incl.\nrolling-window guide)"];
+  p_sched [shape=ellipse, fillcolor="#ead7ff", label="Scheduling\n(driftrev.scheduler / cron\nrun_daily.sh)"];
+  p_run   [shape=ellipse, fillcolor="#ead7ff", label="Running Pipeline\n(service.start_pipeline →\npipeline.run_pipeline)"];
+  p_prev  [shape=ellipse, fillcolor="#ead7ff", label="Previewing Orders\n(broker.preview_orders)"];
+  p_sub   [shape=ellipse, fillcolor="#ead7ff", label="Submitting Orders\n(broker.submit_orders, bracket)"];
+  p_close [shape=ellipse, fillcolor="#ead7ff", label="Closing Expired Positions\n(exit_by_date passed)"];
+
+  agent -> p_brief [arrowhead=dot]; xai -> p_brief [arrowhead=odot]; tools -> p_brief [arrowhead=odot];
+  p_brief -> p_auth [style=dashed, label="HTTP tool calls"];
+  agent -> p_auth [arrowhead=dot, label="MCP / OpenAPI"];
+  p_auth -> token [dir=both];
+  token -> p_query [arrowhead=odot, style=bold, label="[authorised]"];
+  rest -> p_query [arrowhead=odot]; mcp -> p_query [arrowhead=odot]; arts -> p_query [arrowhead=odot];
+  p_query -> p_run [style=dashed, label="[POST /v1/pipeline/run]"];
+  clock -> p_sched [arrowhead=dot]; p_sched -> p_run [style=dashed, label="[22:30 ET Mon-Fri]"];
+  p_run -> job [dir=both]; p_run -> arts [dir=both];
+  human -> p_mon [arrowhead=dot]; dash -> p_mon [arrowhead=odot]; arts -> p_mon [arrowhead=odot];
+  p_query -> p_prev [style=dashed, label="[POST /v1/orders/preview]"];
+  arts -> p_prev [arrowhead=odot]; p_prev -> orders;
+  orders -> p_sub; guard -> p_sub [arrowhead=odot, style=bold, label="[both true]"]; alpaca -> p_sub [arrowhead=odot];
+  p_sub -> orders [dir=both, label="previewed → submitted | refused"];
+  arts -> p_close [arrowhead=odot]; alpaca -> p_close [arrowhead=odot]; guard -> p_close [arrowhead=odot, style=bold];
+}

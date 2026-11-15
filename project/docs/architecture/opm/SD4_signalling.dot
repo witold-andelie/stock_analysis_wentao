@@ -1,0 +1,43 @@
+// SD4 · Signalling Event Trades in-zoomed: newest events -> tiers, sizes, stops -> artifacts.
+digraph SD4 {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.4, ranksep=0.8,
+         label="SD4 · Signalling Event Trades (in-zoomed) · pipeline.publish_live + signals.build_signals"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#fff3b0"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  ml      [shape=box, fillcolor="#e6e6e6", label="ML Frame\n(last 90 days)"];
+  bundle  [shape=box, fillcolor="#ffe0b3", label="Model Bundle"];
+  preds   [shape=box, fillcolor="#ffe0b3", label="TEST Predictions\n(predictions_test.parquet)"];
+  ctx     [shape=box, fillcolor="#e6e6e6", label="Market Context\n(regime_state)"];
+  panel   [shape=box, fillcolor="#e6e6e6", label="Daily Panel"];
+  strat   [shape=box, label="Strategy Settings\n(stop 15% / TP 25% / 10 sessions;\nbreakouts: 2 ATR / 3R / 8 sessions)"];
+
+  p_score [shape=ellipse, label="Scoring Events\n(models.predict_with_bundle)"];
+  p_exp   [shape=ellipse, label="Estimating Net Edge\n(TEST decile lookup − round-trip cost)"];
+  p_tier  [shape=ellipse, penwidth=2, label="Tiering\n(threshold, cost hurdle,\nregime downgrade)"];
+  p_size  [shape=ellipse, label="Sizing & Setting Exits\n(weight, stop, take-profit, exit_by_date)"];
+  p_pub   [shape=ellipse, label="Publishing Artifacts\n(artifacts.save_*)"];
+  p_log   [shape=ellipse, label="Logging Run\n(append_run_log)"];
+
+  signal [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#fff3b0">
+      <TR><TD BORDER="0" COLSPAN="6"><B>Signal</B> (tier)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">STRONG_BUY</TD><TD STYLE="rounded" BGCOLOR="white">BUY</TD><TD STYLE="rounded" BGCOLOR="white">WATCH</TD>
+          <TD STYLE="rounded" BGCOLOR="white">SKIP</TD><TD STYLE="rounded" BGCOLOR="white">AVOID</TD><TD STYLE="rounded" BGCOLOR="white">NO_CALL</TD></TR>
+    </TABLE>>];
+  book   [shape=box, style="filled,bold", penwidth=2, label="Signal Book\n(signals_latest = last session,\nevents_recent = 90 days)"];
+  agg [shape=triangle, style=filled, fillcolor=black, label="", width=0.25, height=0.22];
+  arts   [shape=box, style="filled,bold", label="Artifact Store\n(data/artifacts/: parquet + json)"];
+  others [shape=box, label="prices_recent, universe,\nmetrics.json (data_through, regime)"];
+  runlog [shape=box, label="Run Log"];
+
+  ml -> p_score [arrowhead=odot]; bundle -> p_score [arrowhead=odot]; p_score -> signal [label="prob"];
+  preds -> p_exp [arrowhead=odot]; p_exp -> signal [dir=both, label="expected_net_return"];
+  ctx -> p_tier [arrowhead=odot]; bundle -> p_tier [arrowhead=odot, label="threshold"];
+  p_tier -> signal [dir=both, label="tier"];
+  strat -> p_size [arrowhead=odot]; p_size -> signal [dir=both];
+  signal -> p_pub; panel -> p_pub [arrowhead=odot]; ctx -> p_pub [arrowhead=odot];
+  p_pub -> book; p_pub -> others;
+  arts -> agg [arrowhead=none]; agg -> book [arrowhead=none]; agg -> others [arrowhead=none]; agg -> runlog [arrowhead=none];
+  p_pub -> p_log [style=dashed]; p_log -> runlog;
+}

@@ -1,0 +1,68 @@
+// SD2 · Transforming in-zoomed: raw tables -> Daily Panel + Event Dataset (+ Market Context).
+digraph SD2 {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.35, ranksep=0.6,
+         label="SD2 · Transforming (in-zoomed) · features.build_all · no look-ahead: row t uses data known by the close of t\n(filings until 09:00 ET next morning; FRED and pageviews lagged one row)"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#e6e6e6"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  // inputs (from SD1)
+  t_px  [shape=box, fillcolor="#cfe2ff", label="prices"];
+  t_mkt [shape=box, fillcolor="#cfe2ff", label="market"];
+  t_mac [shape=box, fillcolor="#cfe2ff", label="macro"];
+  t_fil [shape=box, fillcolor="#cfe2ff", label="filings"];
+  t_eps [shape=box, fillcolor="#cfe2ff", label="eps_facts"];
+  t_pv  [shape=box, fillcolor="#cfe2ff", label="pageviews"];
+  t_uni [shape=box, fillcolor="#cfe2ff", label="universe"];
+  rules [shape=box, label="Settings\n(config.py: EventRule, Target,\nRegime, rolling_window defaults)"];
+
+  // processes
+  p_ctx  [shape=ellipse, label="Building Market Context\n(SPY/IWM/VIX term, sector corr,\nFRED lag 1)"];
+  p_str  [shape=ellipse, label="Ranking Prior Strength\n(cross-sectional pct of D(t,20),\nliquid names, max over t-10..t-1)"];
+  p_tick [shape=ellipse, label="Computing Ticker Features\n(~45 technical / momentum /\nvolume / risk + targets)"];
+  p_rw   [shape=ellipse, label="Computing Rolling-Window State\n(D, M(t,W), Release(j), setup, arms)"];
+  p_earn [shape=ellipse, label="Dating Earnings Releases\n(8-K 2.02: after 16:00 ET → next session)"];
+  p_det  [shape=ellipse, penwidth=2, label="Detecting Events"];
+  p_hist [shape=ellipse, label="Adding Earnings History\n(prev EAR, prev PEAD, beats_last4)"];
+  p_edg  [shape=ellipse, label="Tagging EDGAR Causes\n(window prev 16:00 → next 09:00 ET,\npriority taxonomy, prior counts)"];
+  p_att  [shape=ellipse, label="Measuring Attention\n(views ratio 7/90, spike)"];
+  p_sue  [shape=ellipse, label="Attaching Point-in-time SUE\n(first-reported EPS, filed ≤ t)"];
+  p_reg  [shape=ellipse, label="Assessing Regime\n(5 fragility flags → points → state)"];
+
+  // outputs
+  panel [shape=box, style="filled,bold", label="Daily Panel\n(4.4M ticker-days: OHLC, returns,\nMA ratios, liquidity, is_crash)"];
+  ctx   [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#e6e6e6">
+      <TR><TD BORDER="0" COLSPAN="3"><B>Market Context</B> (regime_state)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">normal</TD><TD STYLE="rounded" BGCOLOR="white">elevated</TD><TD STYLE="rounded" BGCOLOR="white">stressed</TD></TR>
+    </TABLE>>];
+  events [shape=box, style="filled,bold", penwidth=2, label="Event Dataset\n(one row per event, ~200 features + targets)"];
+
+  // specialisation of Event
+  gen [shape=triangle, style=filled, fillcolor=white, label="", width=0.25, height=0.22];
+  e_up   [shape=box, label="earnings_up\n(HW1: PEAD + momentum)"];
+  e_dn   [shape=box, label="earnings_down"];
+  e_cr   [shape=box, label="earnings_crash\n(≤ -10% on earnings)"];
+  e_sh   [shape=box, label="shock_crash\n(HW5 Q3: panic vs damage)"];
+  e_bo   [shape=box, label="momentum_breakout\n(strategy guide, Variant B)"];
+  events -> gen [arrowhead=none];
+  gen -> e_up [arrowhead=none]; gen -> e_dn [arrowhead=none]; gen -> e_cr [arrowhead=none];
+  gen -> e_sh [arrowhead=none]; gen -> e_bo [arrowhead=none];
+
+  // links
+  t_mkt -> p_ctx [arrowhead=odot]; t_mac -> p_ctx [arrowhead=odot]; p_ctx -> ctx;
+  t_px -> p_str [arrowhead=odot]; ctx -> p_str [arrowhead=odot];
+  t_px -> p_tick [arrowhead=odot]; ctx -> p_tick [arrowhead=odot]; t_uni -> p_tick [arrowhead=odot];
+  p_tick -> panel;
+  p_str -> p_rw [style=dashed, label="prior strength"]; p_tick -> p_rw [style=dashed];
+  t_fil -> p_earn [arrowhead=odot];
+  rules -> p_det [arrowhead=odot];
+  p_rw -> p_det [style=dashed]; p_earn -> p_det [style=dashed];
+  p_det -> events [label="liquid rows where\nearnings | crash | arm A"];
+  p_det -> p_hist [style=dashed]; p_hist -> events [dir=both];
+  t_fil -> p_edg [arrowhead=odot]; p_edg -> events [dir=both];
+  t_pv -> p_att [arrowhead=odot]; p_att -> events [dir=both];
+  t_eps -> p_sue [arrowhead=odot]; p_sue -> events [dir=both];
+  panel -> p_reg [arrowhead=odot]; p_reg -> ctx [dir=both]; ctx -> events [arrowhead=odot, label="joined by date"];
+
+  { rank=same; t_px; t_mkt; t_mac; t_fil; t_eps; t_pv; t_uni; }
+}
