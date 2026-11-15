@@ -6,7 +6,7 @@ digraph SD1 {
   edge  [fontname="Helvetica", fontsize=9];
 
   // environmental objects
-  wiki   [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Wikipedia\nS&P 500/400/600 lists"];
+  wiki   [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Wikipedia\nS&P 500/400/600 lists +\nHistorical components (changes)"];
   yahoo  [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Yahoo Finance\n(yfinance)"];
   fred   [shape=box, style="filled,dashed", fillcolor="#ffffff", label="FRED\n(DGS10, DGS2, DFF,\nBAA10Y, T10Y2Y)"];
   sec    [shape=box, style="filled,dashed", fillcolor="#ffffff", label="SEC EDGAR\n(submissions, companyconcept)"];
@@ -17,7 +17,9 @@ digraph SD1 {
   // warehouse and its parts
   warehouse [shape=box, style="filled,bold", penwidth=2, label="Warehouse\n(data/warehouse.duckdb)"];
   agg [shape=triangle, style=filled, fillcolor=black, label="", width=0.25, height=0.22];
-  t_uni  [shape=box, label="universe\n(ticker, sector, cap_bucket,\ncik, wikipedia_title)"];
+  t_uni  [shape=box, label="universe\n(ticker, sector, cap_bucket,\ncik, wikipedia_title,\nis_current_member)"];
+  t_mem  [shape=box, label="membership_history\n(ticker, index_name,\nstart_date, end_date)"];
+  t_cons [shape=box, label="consensus_eps\n(release date, EPS estimate,\nreported EPS, surprise %)"];
   t_px   [shape=box, label="prices\n(split-adjusted OHLCV\n+ dividends, splits)"];
   t_mkt  [shape=box, label="market\n(SPY, IWM, MDY, ^VIX,\n^VIX3M, 11 sector ETFs)"];
   t_mac  [shape=box, label="macro\n(FRED series, long)"];
@@ -29,17 +31,23 @@ digraph SD1 {
   agg -> t_uni [arrowhead=none]; agg -> t_px [arrowhead=none]; agg -> t_mkt [arrowhead=none];
   agg -> t_mac [arrowhead=none]; agg -> t_fil [arrowhead=none]; agg -> t_eps [arrowhead=none];
   agg -> t_pv [arrowhead=none]; agg -> t_log [arrowhead=none];
+  agg -> t_mem [arrowhead=none]; agg -> t_cons [arrowhead=none];
 
   // processes (sequence top to bottom)
   p_uni [shape=ellipse, label="Refreshing Universe\n(universe.load_or_fetch)"];
+  p_mem [shape=ellipse, label="Loading Historical Membership\n(membership.update_membership;\nchange tables + removed tickers:\nCIK, SIC sector, delisted prices)"];
   p_mac [shape=ellipse, label="Loading Macro\n(macro.update_macro;\nre-pull last 60 days)"];
   p_mkt [shape=ellipse, label="Loading Market Series\n(prices.update_market)"];
   p_px  [shape=ellipse, label="Loading Prices\n(prices.update_prices;\n7-day overlap, split → full reload)"];
   p_sec [shape=ellipse, label="Loading Filings & EPS\n(edgar.update_edgar;\nskip CIKs fetched < 12 h ago)"];
   p_pv  [shape=ellipse, label="Loading Attention\n(attention.update_pageviews)"];
+  p_cons [shape=ellipse, label="Loading Consensus EPS\n(consensus.update_consensus;\nincremental, partial coverage ok)"];
 
   wiki -> p_uni [arrowhead=odot]; sec -> p_uni [arrowhead=odot, label="ticker→CIK"];
   p_uni -> t_uni [dir=both];
+  wiki -> p_mem [arrowhead=odot]; sec -> p_mem [arrowhead=odot, label="CIK, SIC of\nremoved names"]; yahoo -> p_mem [arrowhead=odot, label="delisted prices\n(when available)"];
+  p_mem -> t_mem [dir=both]; p_mem -> t_uni [dir=both, label="adds removed names\n(is_current_member=false)"]; p_mem -> t_px [dir=both];
+  yahoo -> p_cons [arrowhead=odot]; t_uni -> p_cons [arrowhead=odot]; p_cons -> t_cons [dir=both];
   fred -> p_mac [arrowhead=odot]; p_mac -> t_mac [dir=both];
   yahoo -> p_mkt [arrowhead=odot]; p_mkt -> t_mkt [dir=both];
   t_uni -> p_px [arrowhead=odot]; yahoo -> p_px [arrowhead=odot]; p_px -> t_px [dir=both];
@@ -48,5 +56,5 @@ digraph SD1 {
   t_uni -> p_pv [arrowhead=odot]; wmf -> p_pv [arrowhead=odot]; ua -> p_pv [arrowhead=odot]; lim -> p_pv [arrowhead=odot];
   p_pv -> t_pv [dir=both];
 
-  p_uni -> p_mac -> p_mkt -> p_px -> p_sec -> p_pv [style=invis, weight=10];
+  p_uni -> p_mem -> p_mac -> p_mkt -> p_px -> p_sec -> p_pv -> p_cons [style=invis, weight=10];
 }

@@ -1,0 +1,19 @@
+# Lint configuration (CI: `ruff check .`). Pragmatic rule set: real bugs and hygiene, no style bikeshedding.
+line-length = 130
+target-version = "py311"
+extend-exclude = ["notebooks", "data", ".venv"]
+
+[lint]
+select = ["E", "F", "W", "B", "I", "UP"]
+ignore = [
+  "E501",   # long lines: tables of feature names read better unwrapped
+  "B008",   # FastAPI Query()/Header() defaults are idiomatic
+  "B905",   # zip(strict=) not required
+  "E731",   # small lambdas are fine for lookups
+  "E741",   # h, l, c = high, low, close in OHLC indicator math
+  "UP038",  # deprecated rule; isinstance(x, (A, B)) is faster and fine
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B011"]
+"dashboard/app.py" = ["E402"]   # sys.path insert before imports

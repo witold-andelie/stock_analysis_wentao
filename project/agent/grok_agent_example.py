@@ -19,7 +19,7 @@ HERE = Path(__file__).parent
 TOOLS = json.loads((HERE / "tools.json").read_text())
 ROUTES = json.loads((HERE / "routes.json").read_text())
 
-XAI_URL = "https://api.x.ai/v1/chat/completions"
+XAI_URL = os.environ.get("XAI_API_URL", "https://api.x.ai/v1/chat/completions")  # override only for tests
 MODEL = os.environ.get("XAI_MODEL", "grok-4")
 API = os.environ.get("DRIFTREV_API_URL", "http://localhost:8000").rstrip("/")
 SYSTEM = ("You are a trading-research assistant. Use the tools to answer from real data, "
@@ -43,12 +43,16 @@ def call_api(name: str, args: dict) -> str:
 
 
 def run(question: str, max_steps: int = 6) -> str:
-    key = os.environ["XAI_API_KEY"]
+    key = os.environ.get("XAI_API_KEY", "")
+    if not key:
+        raise SystemExit("XAI_API_KEY is not set. Export it (https://console.x.ai) and run again; "
+                         "no request was sent.")
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}]
     for _ in range(max_steps):
         resp = httpx.post(XAI_URL, headers={"Authorization": f"Bearer {key}"}, timeout=120,
                           json={"model": MODEL, "messages": messages, "tools": TOOLS, "tool_choice": "auto"})
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise SystemExit(f"xAI API error {resp.status_code}: {resp.text[:300]}")
         msg = resp.json()["choices"][0]["message"]
         messages.append(msg)
         calls = msg.get("tool_calls") or []
@@ -65,4 +69,7 @@ def run(question: str, max_steps: int = 6) -> str:
 
 
 if __name__ == "__main__":
-    print(run(" ".join(sys.argv[1:]) or "What are today's best signals?"))
+    try:
+        print(run(" ".join(sys.argv[1:]) or "What are today's best signals?"))
+    except httpx.TransportError as exc:  # xAI or our API unreachable
+        raise SystemExit(f"Network error: {exc}") from exc

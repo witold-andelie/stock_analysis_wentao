@@ -6,3 +6,7 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 notebooks/
+tests/
+docs/
+deploy/
+*.docx

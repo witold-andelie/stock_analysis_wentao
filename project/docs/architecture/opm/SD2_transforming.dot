@@ -13,7 +13,9 @@ digraph SD2 {
   t_eps [shape=box, fillcolor="#cfe2ff", label="eps_facts"];
   t_pv  [shape=box, fillcolor="#cfe2ff", label="pageviews"];
   t_uni [shape=box, fillcolor="#cfe2ff", label="universe"];
-  rules [shape=box, label="Settings\n(config.py: EventRule, Target,\nRegime, rolling_window defaults)"];
+  t_mem [shape=box, fillcolor="#cfe2ff", label="membership_history"];
+  t_cons [shape=box, fillcolor="#cfe2ff", label="consensus_eps"];
+  rules [shape=box, label="Settings\n(config.py: EventRule, Target,\nRegime, Membership, rolling_window defaults)"];
 
   // processes
   p_ctx  [shape=ellipse, label="Building Market Context\n(SPY/IWM/VIX term, sector corr,\nFRED lag 1)"];
@@ -26,10 +28,13 @@ digraph SD2 {
   p_edg  [shape=ellipse, label="Tagging EDGAR Causes\n(window prev 16:00 → next 09:00 ET,\npriority taxonomy, prior counts)"];
   p_att  [shape=ellipse, label="Measuring Attention\n(views ratio 7/90, spike)"];
   p_sue  [shape=ellipse, label="Attaching Point-in-time SUE\n(first-reported EPS, filed ≤ t)"];
+  p_mbr  [shape=ellipse, label="Flagging Index Membership\n(point-in-time in_index;\nevents only while a member)"];
+  p_cor  [shape=ellipse, label="Tracking Market Correction\n(SPY >= 5% below running ATH:\nin_correction, depth, days)"];
+  p_con  [shape=ellipse, label="Attaching Consensus Surprise\n(release within +-3 sessions,\nvalue known by event close)"];
   p_reg  [shape=ellipse, label="Assessing Regime\n(5 fragility flags → points → state)"];
 
   // outputs
-  panel [shape=box, style="filled,bold", label="Daily Panel\n(4.4M ticker-days: OHLC, returns,\nMA ratios, liquidity, is_crash)"];
+  panel [shape=box, style="filled,bold", label="Daily Panel\n(4.4M ticker-days: OHLC, returns,\nMA ratios, liquidity, is_crash, in_index)"];
   ctx   [shape=plain, style="", label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#e6e6e6">
       <TR><TD BORDER="0" COLSPAN="3"><B>Market Context</B> (regime_state)</TD></TR>
@@ -60,9 +65,16 @@ digraph SD2 {
   p_det -> events [label="liquid rows where\nearnings | crash | arm A"];
   p_det -> p_hist [style=dashed]; p_hist -> events [dir=both];
   t_fil -> p_edg [arrowhead=odot]; p_edg -> events [dir=both];
+  t_ftx  [shape=box, fillcolor="#cfe2ff", label="filing_text\n(flags, LM tone, snippets)"];
+  p_ftx  [shape=ellipse, penwidth=2, label="Classifying Filing Text\n(in-zoomed in SD2.1;\nft_* flags, edgar_category_text)"];
+  t_ftx -> p_ftx [arrowhead=odot]; t_fil -> p_ftx [arrowhead=odot];
+  p_edg -> p_ftx [style=dashed, label="refines category"]; p_ftx -> events [dir=both];
   t_pv -> p_att [arrowhead=odot]; p_att -> events [dir=both];
   t_eps -> p_sue [arrowhead=odot]; p_sue -> events [dir=both];
+  t_mem -> p_mbr [arrowhead=odot]; rules -> p_mbr [arrowhead=odot]; p_mbr -> panel [dir=both]; p_mbr -> p_det [style=dashed, label="member mask"];
+  t_mkt -> p_cor [arrowhead=odot]; p_cor -> ctx [dir=both];
+  t_cons -> p_con [arrowhead=odot]; p_con -> events [dir=both];
   panel -> p_reg [arrowhead=odot]; p_reg -> ctx [dir=both]; ctx -> events [arrowhead=odot, label="joined by date"];
 
-  { rank=same; t_px; t_mkt; t_mac; t_fil; t_eps; t_pv; t_uni; }
+  { rank=same; t_px; t_mkt; t_mac; t_fil; t_eps; t_pv; t_uni; t_mem; t_cons; }
 }

@@ -48,6 +48,11 @@ def plan(now: float | None = None) -> list[tuple[Path, str]]:
                 out.append((p, f"edgar root json > {R.edgar_root_days} d"))
             elif _PAGE.match(p.name) and _age_days(p, now) > R.edgar_history_days:
                 out.append((p, f"edgar history page > {R.edgar_history_days} d"))
+    ft_dir = config.CACHE_DIR / "filing_text"
+    if ft_dir.exists():
+        for p in ft_dir.rglob("*"):
+            if p.is_file() and _age_days(p, now) > R.filing_text_raw_days:
+                out.append((p, f"raw filing text > {R.filing_text_raw_days} d"))
     if config.HISTORY_DIR.exists():
         cutoff = time.strftime("%Y-%m-%d", time.localtime(now - R.signal_history_days * 86400))
         for d in config.HISTORY_DIR.iterdir():

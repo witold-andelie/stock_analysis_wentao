@@ -1,0 +1,32 @@
+# Render Blueprint (TEMPLATE, not deployed). Dashboard -> New -> Blueprint -> point at this repo/file.
+# Persistent disks need a paid instance type; a disk attaches to one instance (single DuckDB writer).
+services:
+  - type: web
+    name: driftrev-api
+    runtime: image
+    image:
+      url: ghcr.io/OWNER/driftrev:latest
+    plan: starter
+    numInstances: 1
+    healthCheckPath: /health
+    dockerCommand: sh -c 'python -m driftrev.scheduler & exec uvicorn driftrev.api:app --host 0.0.0.0 --port 8000'
+    disk:
+      name: driftrev-data
+      mountPath: /data
+      sizeGB: 3
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: DRIFTREV_DATA_DIR
+        value: /data
+      - key: DRIFTREV_API_TOKEN
+        sync: false            # set in the dashboard
+      - key: SEC_USER_AGENT
+        sync: false
+      - key: ALPACA_PAPER
+        value: "true"
+      - key: DRIFTREV_ALLOW_ORDERS
+        value: "false"
+      # optional, set in dashboard: TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID ALPACA_API_KEY ALPACA_SECRET_KEY
+  # The scheduler (daily pipeline 22:30 ET) runs beside the API in the same container because a Render
+  # disk attaches to one service only.

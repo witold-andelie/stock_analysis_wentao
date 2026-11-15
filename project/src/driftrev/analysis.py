@@ -56,3 +56,19 @@ def calibration(df: pd.DataFrame, prob_col: str, bins: int = 10) -> pd.DataFrame
     d["bucket"] = pd.qcut(d[prob_col], bins, duplicates="drop")
     return d.groupby("bucket", observed=True).agg(mean_prob=(prob_col, "mean"), hit_rate=(TARGET, "mean"),
                                                   avg_growth=("growth_future_10d", "mean"), n=(TARGET, "size")).reset_index()
+
+
+def uniquely_correct_table(df: pd.DataFrame, pred_cols: list[str]) -> pd.DataFrame:
+    """HW3 analysis: rows where exactly ONE prediction is correct (pred == target) and all the others
+    are wrong. Shows what each rule/model contributes that no other does. Needs known targets."""
+    d = df[df[TARGET].notna()]
+    correct = pd.DataFrame({p: (d[p] == d[TARGET]).to_numpy() for p in pred_cols}, index=d.index)
+    n_correct = correct.sum(axis=1)
+    rows = []
+    for p in pred_cols:
+        uniq = correct[p] & (n_correct == 1)
+        sel = d[p] == 1
+        rows.append({"prediction": p, "n_correct": int(correct[p].sum()), "n_uniquely_correct": int(uniq.sum()),
+                     "share_of_rows": float(uniq.mean()), "n_positive": int(sel.sum()),
+                     "uniquely_correct_positives": int((uniq & sel).sum())})
+    return pd.DataFrame(rows).sort_values("n_uniquely_correct", ascending=False)

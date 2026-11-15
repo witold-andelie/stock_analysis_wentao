@@ -1,6 +1,8 @@
 x-common: &common
   build: .
   env_file: .env
+  environment:
+    DRIFTREV_DATA_DIR: /data   # wins over .env (.env.example uses ./data for non-Docker runs)
   restart: unless-stopped
   volumes:
     - driftrev-data:/data

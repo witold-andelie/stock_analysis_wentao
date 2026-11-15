@@ -10,11 +10,13 @@ digraph SD4 {
   preds   [shape=box, fillcolor="#ffe0b3", label="TEST Predictions\n(predictions_test.parquet)"];
   ctx     [shape=box, fillcolor="#e6e6e6", label="Market Context\n(regime_state)"];
   panel   [shape=box, fillcolor="#e6e6e6", label="Daily Panel"];
+  costs   [shape=box, fillcolor="#ffe0b3", label="Cost Model\n(8 / 15 / 25 bps by cap bucket)"];
+  bookr   [shape=box, fillcolor="#ffe0b3", label="Book Rules\n(excluded families / EDGAR categories)"];
   strat   [shape=box, label="Strategy Settings\n(stop 15% / TP 25% / 10 sessions;\nbreakouts: 2 ATR / 3R / 8 sessions)"];
 
   p_score [shape=ellipse, label="Scoring Events\n(models.predict_with_bundle)"];
-  p_exp   [shape=ellipse, label="Estimating Net Edge\n(TEST decile lookup − round-trip cost)"];
-  p_tier  [shape=ellipse, penwidth=2, label="Tiering\n(threshold, cost hurdle,\nregime downgrade)"];
+  p_exp   [shape=ellipse, label="Estimating Net Edge\n(TEST decile lookup − cap-aware\nround-trip cost of the stock's cap bucket)"];
+  p_tier  [shape=ellipse, penwidth=2, label="Tiering\n(threshold, cap-aware cost hurdle,\nregime downgrade, book exclusions → SKIP)"];
   p_size  [shape=ellipse, label="Sizing & Setting Exits\n(weight, stop, take-profit, exit_by_date)"];
   p_pub   [shape=ellipse, label="Publishing Artifacts\n(artifacts.save_*)"];
   p_log   [shape=ellipse, label="Logging Run\n(append_run_log)"];
@@ -32,6 +34,7 @@ digraph SD4 {
   runlog [shape=box, label="Run Log"];
 
   ml -> p_score [arrowhead=odot]; bundle -> p_score [arrowhead=odot]; p_score -> signal [label="prob"];
+  costs -> p_exp [arrowhead=odot]; costs -> p_tier [arrowhead=odot]; bookr -> p_tier [arrowhead=odot];
   preds -> p_exp [arrowhead=odot]; p_exp -> signal [dir=both, label="expected_net_return"];
   ctx -> p_tier [arrowhead=odot]; bundle -> p_tier [arrowhead=odot, label="threshold"];
   p_tier -> signal [dir=both, label="tier"];

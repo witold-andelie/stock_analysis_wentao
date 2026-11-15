@@ -29,6 +29,19 @@ RT = S.costs.round_trip
 ONE_WAY = S.costs.bps_one_way / 1e4
 
 
+def one_way_cost(cap_bucket=None, cost_model: str | None = None, mult: float = 1.0) -> float:
+    """One-way cost as a fraction. cost_model 'cap' = cap-aware bps (config.CapCosts), 'flat' = Costs.bps_one_way."""
+    model = cost_model or ("cap" if S.cap_costs.enabled else "flat")
+    if model == "flat":
+        return ONE_WAY * mult
+    return config.CapCosts(True, S.cap_costs.large, S.cap_costs.mid, S.cap_costs.small).bps(
+        cap_bucket, S.costs.bps_one_way) / 1e4 * mult
+
+
+def round_trip_cost(cap_bucket=None, cost_model: str | None = None) -> float:
+    return 2 * one_way_cost(cap_bucket, cost_model)
+
+
 # --------------------------------------------------------------------------------------
 # Metrics
 # --------------------------------------------------------------------------------------
@@ -40,7 +53,7 @@ def perf_metrics(equity: pd.Series, name: str) -> dict:
     years = (equity.index[-1] - equity.index[0]).days / 365.25
     cagr = (equity.iloc[-1] / equity.iloc[0]) ** (1 / years) - 1 if years > 0 else np.nan
     dd = equity / equity.cummax() - 1
-    downside = rets[rets < 0].std() * np.sqrt(252)
+    downside = float(np.sqrt((rets.clip(upper=0) ** 2).mean()) * np.sqrt(252))     # target downside deviation (MAR = 0)
     roll = equity.pct_change(252).dropna()
     return {
         "name": name, "start": equity.index[0].date().isoformat(), "end": equity.index[-1].date().isoformat(),
@@ -58,7 +71,7 @@ def perf_metrics(equity: pd.Series, name: str) -> dict:
 # --------------------------------------------------------------------------------------
 # Vector simulations (course sim1_ / sim2_)
 # --------------------------------------------------------------------------------------
-def vector_sim(df: pd.DataFrame, pred_cols: list[str], bet: float = 100.0) -> pd.DataFrame:
+def vector_sim(df: pd.DataFrame, pred_cols: list[str], bet: float = 100.0, cost_model: str | None = None) -> pd.DataFrame:
     """df: TEST rows with growth_future_10d, mae_10d, mfe_10d. Returns one row per prediction."""
     hz = S.target.horizon
     st = S.strategy
@@ -71,7 +84,10 @@ def vector_sim(df: pd.DataFrame, pred_cols: list[str], bet: float = 100.0) -> pd
         g = sel[f"growth_future_{hz}d"]
         # sim1: hold to the horizon
         gross1 = (bet * (g - 1)).sum()
-        fees = bet * RT * len(sel)
+        if "cap_bucket" in sel:
+            fees = float(bet * sel["cap_bucket"].map(lambda c: round_trip_cost(c, cost_model)).sum())
+        else:
+            fees = bet * round_trip_cost(None, cost_model) * len(sel)
         # sim2: stop-loss first (conservative), then take-profit, else horizon exit
         r2 = np.where(sel["mae_10d"] <= -st.stop_loss, -st.stop_loss,
                       np.where(sel["mfe_10d"] >= st.take_profit, st.take_profit, g - 1))
@@ -123,6 +139,9 @@ class SimConfig:
     gap_tolerance: float | None = None
     circuit_breaker_stops: int | None = None
     cost_mult: float = 1.0                 # cost stress test: 1x / 2x / 3x
+    cost_model: str | None = None          # 'cap' (default from config) or 'flat' 15 bps
+    exclude_families: tuple[str, ...] = ()     # model book composition (research item 2)
+    exclude_categories: tuple[str, ...] = ()   # EDGAR categories the model never trades
     initial_capital: float = S.strategy.initial_capital
 
 
@@ -136,12 +155,15 @@ def exact_sim(events: pd.DataFrame, panel: pd.DataFrame, cfg: SimConfig,
     """events: rows with ticker, date, next_date, close, event_family, regime_state, prob_col
     (+ atr_pct for the R framework). Signals known at the close of `date` are executed at
     the open of `next_date`. Returns (daily equity, trades). Trades carry fill info."""
-    one_way = ONE_WAY * cfg.cost_mult
     ev = events.dropna(subset=["next_date", cfg.prob_col]).copy()
     if start:
         ev = ev[ev["date"] >= pd.Timestamp(start)]
     if cfg.families:
         ev = ev[ev["event_family"].isin(cfg.families)]
+    if cfg.exclude_families:
+        ev = ev[~ev["event_family"].isin(cfg.exclude_families)]
+    if cfg.exclude_categories and "edgar_category" in ev:
+        ev = ev[~ev["edgar_category"].isin(cfg.exclude_categories)]
     if cfg.filter_col:
         ev = ev[ev[cfg.filter_col] == 1]
     if cfg.regime_pause:
@@ -183,6 +205,7 @@ def exact_sim(events: pd.DataFrame, panel: pd.DataFrame, cfg: SimConfig,
                     skipped["no_data"] += 1
                     continue
                 bar = paths[r.ticker].loc[day]
+                one_way = one_way_cost(getattr(r, "cap_bucket", None), cfg.cost_model, cfg.cost_mult)
                 o = bar["open"]
                 if not np.isfinite(o) or o <= 0:
                     skipped["no_data"] += 1
@@ -222,7 +245,7 @@ def exact_sim(events: pd.DataFrame, panel: pd.DataFrame, cfg: SimConfig,
                     tp = cfg.take_profit
                 positions.append({"ticker": r.ticker, "side": r.side, "shares": shares, "entry": o, "entry_date": day,
                                   "days": 0, "prob": float(getattr(r, cfg.prob_col)), "event_family": r.event_family,
-                                  "event_date": r.date, "cost_in": size * one_way, "stop": stop_dist, "tp": tp,
+                                  "event_date": r.date, "cost_in": size * one_way, "one_way": one_way, "stop": stop_dist, "tp": tp,
                                   "risk": size * (stop_dist or 0)})
                 held.add(r.ticker)
         # 2) exits: stop / take-profit intraday, time exit at the close
@@ -254,8 +277,8 @@ def exact_sim(events: pd.DataFrame, panel: pd.DataFrame, cfg: SimConfig,
                 continue
             stops_today += reason == "stop_loss"
             notional = abs(p["shares"]) * exit_px
-            cash += p["shares"] * exit_px - notional * one_way
-            pnl = p["shares"] * (exit_px - e) - p["cost_in"] - notional * one_way
+            cash += p["shares"] * exit_px - notional * p["one_way"]
+            pnl = p["shares"] * (exit_px - e) - p["cost_in"] - notional * p["one_way"]
             entry_notional = abs(p["shares"]) * e
             trades.append({"strategy": cfg.name, "ticker": p["ticker"], "side": "long" if sd == 1 else "short",
                            "event_family": p["event_family"], "event_date": p["event_date"], "prob": p["prob"],
@@ -275,6 +298,9 @@ def exact_sim(events: pd.DataFrame, panel: pd.DataFrame, cfg: SimConfig,
     return equity, tr
 
 
+HEADLINE_STRATEGY = "model_top5"     # fixed in advance: the book defined by config.research (never picked on TEST)
+
+
 def guide_risk(cfg: SimConfig) -> SimConfig:
     """Apply the strategy guide's execution & risk template (Sections 6-7)."""
     return replace(cfg, atr_stop_mult=2.0, r_target=3.0, hold_days=8, risk_per_trade=0.005, max_notional_pct=0.10,
@@ -282,27 +308,33 @@ def guide_risk(cfg: SimConfig) -> SimConfig:
                    stop_loss=None, take_profit=None)
 
 
-def standard_strategies(prob_col: str, thr: float) -> list[SimConfig]:
+def standard_strategies(prob_col: str, thr: float, exclude_families: tuple | None = None,
+                        exclude_categories: tuple | None = None) -> list[SimConfig]:
+    """Model strategies share the configured book composition (research.book_exclude_*); the
+    all-events benchmark, the single-family diagnostics and the rule-based guide arms do not."""
     st = S.strategy
-    base = SimConfig(name="", prob_col=prob_col, min_prob=thr, max_positions=st.max_positions, hold_days=st.hold_days)
-    rule = replace(base, prob_col="rw_prior_strength", min_prob=-1.0)   # arms rank by prior strength
+    ex_f = S.research.book_exclude_families if exclude_families is None else tuple(exclude_families)
+    ex_c = S.research.book_exclude_categories if exclude_categories is None else tuple(exclude_categories)
+    raw = SimConfig(name="", prob_col=prob_col, min_prob=thr, max_positions=st.max_positions, hold_days=st.hold_days)
+    base = replace(raw, exclude_families=ex_f, exclude_categories=ex_c)
+    rule = replace(raw, prob_col="rw_prior_strength", min_prob=-1.0)   # arms rank by prior strength
     breakout = ("momentum_breakout",)
     return [
-        replace(base, name="all_events_unconditional", min_prob=-1.0),
+        replace(raw, name="all_events_unconditional", min_prob=-1.0),
         replace(base, name="model_top5"),
         replace(base, name="model_top3_concentrated", max_positions=3),
         replace(base, name="model_top5_risk_managed", stop_loss=st.stop_loss, take_profit=st.take_profit,
                 prob_weighted=True, regime_pause=True),
         replace(base, name="model_pead_only", families=("earnings_up", "earnings_down")),
         replace(base, name="model_crash_only", families=("earnings_crash", "shock_crash")),
-        replace(base, name="model_breakout_only", families=breakout),
+        replace(raw, name="model_breakout_only", families=breakout),
         replace(base, name="model_long_short", stop_loss=st.stop_loss, take_profit=st.take_profit,
                 regime_pause=True, short_below=0.30, max_positions=6),
         # strategy guide: four-arm test, identical execution & risk framework for every arm
         guide_risk(replace(rule, name="guide_armA_momentum_breakout", filter_col="arm_a", families=breakout)),
         guide_risk(replace(rule, name="guide_armB_plus_consolidation", filter_col="arm_b", families=breakout)),
         guide_risk(replace(rule, name="guide_armC_plus_window_release", filter_col="arm_c", families=breakout)),
-        guide_risk(replace(base, name="guide_model_breakout_R", families=breakout)),
+        guide_risk(replace(raw, name="guide_model_breakout_R", families=breakout)),
         guide_risk(replace(base, name="guide_model_all_events_R")),
     ]
 
@@ -361,7 +393,8 @@ def momentum_baseline(panel: pd.DataFrame, start, end, capital: float, rebalance
     p = panel[(panel["date"] >= pd.Timestamp(start) - pd.Timedelta(days=10)) & (panel["date"] <= end)].copy()
     p["score"] = (p[["close_sma20", "close_sma50", "close_sma200"]].sub(1).mean(axis=1) + p["mom_12_1"]) / 2
     rets = p.pivot_table(index="date", columns="ticker", values="ret_1d").sort_index()
-    score = p[p["is_liquid"]].pivot_table(index="date", columns="ticker", values="score").reindex(rets.index)
+    eligible = p["is_liquid"] & (p["in_index"].fillna(False).astype(bool) if "in_index" in p else True)   # point-in-time members only
+    score = p[eligible].pivot_table(index="date", columns="ticker", values="score").reindex(rets.index)
     dates = rets.index[rets.index >= pd.Timestamp(start)]
     equity, weights, values = capital, pd.Series(dtype=float), []
     for i, d in enumerate(dates):

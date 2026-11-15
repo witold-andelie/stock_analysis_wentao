@@ -48,6 +48,7 @@ SNAPSHOT_URL = _env("DRIFTREV_SNAPSHOT_URL", "")
 # Set your own: SEC_USER_AGENT="Your Name your@email".
 USER_AGENT = _env("SEC_USER_AGENT", "driftrev-research research@example.org")  # SEC needs "name email"
 SEC_MAX_RPS = float(_env("SEC_MAX_RPS", "8"))       # SEC fair-access limit is 10 req/s
+FILING_TEXT_MAX_SECONDS = float(_env("DRIFTREV_FILING_TEXT_MAX_SECONDS", "1200"))  # R4 fetch budget per run
 
 # --------------------------------------------------------------------------------------
 # Universe and history
@@ -67,7 +68,7 @@ SECTOR_ETFS = {
     "Real Estate": "XLRE", "Communication Services": "XLC",
 }
 FRED_SERIES = {
-    "DGS10": "dgs10", "DGS2": "dgs2", "DFF": "fedfunds",
+    "DGS10": "dgs10", "DGS5": "dgs5", "DGS2": "dgs2", "DFF": "fedfunds",
     "BAA10Y": "credit_spread", "T10Y2Y": "t10y2y",
 }
 
@@ -103,6 +104,11 @@ class Target:
 class Split:
     train_end: str = "2021-12-31"
     valid_end: str = "2023-12-31"    # test = 2024-01-01 .. today (strictly out of sample)
+    # Purge: a 10-session label looks ~14 calendar days ahead, so the last rows before a boundary have labels
+    # that are realised inside the next block. With purge=True those rows get split="purged" and are used by
+    # nothing (not for fitting, thresholds or metrics). purge_days = 10 sessions ~ 14 calendar days + 2 safety.
+    purge: bool = True
+    purge_days: int = 16
 
 
 @dataclass(frozen=True)
@@ -115,6 +121,47 @@ class Costs:
     @property
     def round_trip(self) -> float:
         return 2 * self.bps_one_way / 1e4
+
+
+@dataclass(frozen=True)
+class CapCosts:
+    """Cap-aware one-way trading cost in bps (research item: small caps pay more after a crash).
+    ASSUMPTION, justified: S&P 500 names trade with ~1-3 bps half-spread, but on an event day
+    (earnings gap, crash) spreads widen several-fold, plus commission and slippage -> 8 bps;
+    mid caps keep the original 15 bps (S&P 400 spreads ~5-10 bps normal, wider on events);
+    small caps (S&P 600) have 15-30 bps half-spreads on event days and thinner books -> 25 bps.
+    `enabled=False` restores the flat `Costs.bps_one_way` for comparison."""
+
+    enabled: bool = True
+    large: float = 8.0
+    mid: float = 15.0
+    small: float = 25.0
+
+    def bps(self, cap_bucket, flat: float) -> float:
+        if not self.enabled:
+            return flat
+        return {"large": self.large, "mid": self.mid, "small": self.small}.get(str(cap_bucket), self.mid)
+
+
+@dataclass(frozen=True)
+class Research:
+    """Research switches (decided on VALIDATION, see pipeline.train_and_backtest / research.py)."""
+
+    # which feature set feeds the production model: pooled | cs_keep_market | cs_drop_market
+    # VALIDATION winner of the model comparison (b2): stock-level + cross-sectional, market-level inputs removed
+    feature_set: str = "cs_drop_market"
+    # production learner layout: pooled | per_family
+    model_layout: str = "pooled"
+    # model book composition: families / EDGAR categories the MODEL never trades (guide arms are a separate sleeve)
+    book_exclude_families: tuple = ("momentum_breakout",)    # VALIDATION: Sharpe 0.29 -> 0.63
+    book_exclude_categories: tuple = ("offering",)           # VALIDATION: +offering -> 0.69; mgmt_change NOT excluded (val precision 71%)
+    # HW4: cap on average trades per day when choosing the probability threshold (None = off)
+    max_trades_per_day: float | None = 5.0   # VALIDATION: Sharpe 0.29 (uncapped) -> 0.97 at cap 5
+    # R2 walk-forward
+    wf_first_year: int = 2018
+    wf_purge_days: int = 16          # label horizon 10 sessions ~ 14 calendar days, +2 safety
+    wf_model: str = "lgbm"           # learner refit each year
+    sklearn_max_tested: str = "1.7"  # HW4 lesson: RF probabilities change from 1.8
 
 
 @dataclass(frozen=True)
@@ -149,6 +196,7 @@ class Retention:
 
     edgar_root_days: float = 2          # CIK*.json roots are re-fetched every refresh anyway
     edgar_history_days: float = 180     # older submission pages (re-downloadable)
+    filing_text_raw_days: float = 30    # raw exhibit text; flags/tone/snippets stay in the warehouse
     signal_history_days: int = 60       # data/artifacts/history/YYYY-MM-DD/
     snapshot_zips_keep: int = 1
     run_log_max_lines: int = 1000
@@ -160,6 +208,33 @@ class Retention:
 
 
 @dataclass(frozen=True)
+class Membership:
+    """R1 historical index membership (membership.py) + HW1 Q3 correction state + HW1 Q4 consensus."""
+
+    restrict_events: bool = True      # events only while the stock was a member of the S&P 1500
+    merge_gap_days: int = 10          # index migrations (400 -> 500) may leave a few days between rows
+    price_tail_days: int = 45         # keep removed names' prices this long after removal (targets need 10 sessions)
+    min_overlap_days: int = 20        # removed ticker needs >= this many price days inside its membership window
+    wiki_rps: float = 4.0             # Wikimedia etiquette
+    sec_search_rps: float = 4.0       # EDGAR company-search etiquette (SEC limit is 10 rps)
+    name_match_min: float = 0.5       # token overlap between change-table name and EDGAR name (ticker-reuse guard)
+
+
+@dataclass(frozen=True)
+class Correction:
+    threshold: float = 0.05           # SPY >= 5% below its running all-time high = correction (HW1 Q3)
+
+
+@dataclass(frozen=True)
+class Consensus:
+    window_sessions: int = 3          # earnings release within +-3 sessions of the event date
+    refresh_days: float = 7.0         # skip tickers refreshed more recently than this
+    limit: int = 60                   # get_earnings_dates(limit=...) rows per ticker (~15 years of quarters)
+    workers: int = 4
+    max_failures: int = 40            # stop a run after this many consecutive rate-limit-looking failures
+
+
+@dataclass(frozen=True)
 class Settings:
     event: EventRule = field(default_factory=EventRule)
     target: Target = field(default_factory=Target)
@@ -168,6 +243,11 @@ class Settings:
     strategy: Strategy = field(default_factory=Strategy)
     regime: Regime = field(default_factory=Regime)
     retention: Retention = field(default_factory=Retention)
+    cap_costs: CapCosts = field(default_factory=CapCosts)
+    research: Research = field(default_factory=Research)
+    membership: Membership = field(default_factory=Membership)
+    correction: Correction = field(default_factory=Correction)
+    consensus: Consensus = field(default_factory=Consensus)
     random_state: int = 42
 
 

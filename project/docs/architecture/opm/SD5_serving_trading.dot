@@ -38,13 +38,16 @@ digraph SD5 {
   iface -> agg [arrowhead=none]; agg -> rest [arrowhead=none]; agg -> tools [arrowhead=none]; agg -> mcp [arrowhead=none];
 
   p_auth  [shape=ellipse, label="Authenticating\n(security.check_bearer,\nconstant-time compare)"];
-  p_query [shape=ellipse, penwidth=2, label="Answering Queries\n(service.*: signals, events, ticker,\nbacktest, model, regime, runs)"];
+  p_query [shape=ellipse, penwidth=2, label="Answering Queries\n(service.*: signals, events, ticker,\nbacktest, model, regime, runs,\nresearch tables)"];
   p_brief [shape=ellipse, label="Briefing\n(grok_agent_example tool loop)"];
-  p_mon   [shape=ellipse, label="Monitoring\n(dashboard tabs incl.\nrolling-window guide)"];
+  p_mon   [shape=ellipse, label="Monitoring\n(dashboard tabs incl. rolling-window\nguide, research, walk-forward)"];
   p_sched [shape=ellipse, fillcolor="#ead7ff", label="Scheduling\n(driftrev.scheduler / cron\nrun_daily.sh)"];
   p_run   [shape=ellipse, fillcolor="#ead7ff", label="Running Pipeline\n(service.start_pipeline →\npipeline.run_pipeline)"];
   p_prev  [shape=ellipse, fillcolor="#ead7ff", label="Previewing Orders\n(broker.preview_orders)"];
   p_sub   [shape=ellipse, fillcolor="#ead7ff", label="Submitting Orders\n(broker.submit_orders, bracket)"];
+  p_notify [shape=ellipse, label="Notifying\n(driftrev.notify: Telegram Bot API\nand/or JSON webhook)"];
+  chat   [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Telegram chat / webhook receiver\n(Grok bot, n8n, Discord ...)"];
+  notifcfg [shape=box, label="Notification Settings\n(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,\nDRIFTREV_WEBHOOK_URL, NOTIFY_MIN_TIER)"];
   p_close [shape=ellipse, fillcolor="#ead7ff", label="Closing Expired Positions\n(exit_by_date passed)"];
 
   agent -> p_brief [arrowhead=dot]; xai -> p_brief [arrowhead=odot]; tools -> p_brief [arrowhead=odot];
@@ -61,5 +64,8 @@ digraph SD5 {
   arts -> p_prev [arrowhead=odot]; p_prev -> orders;
   orders -> p_sub; guard -> p_sub [arrowhead=odot, style=bold, label="[both true]"]; alpaca -> p_sub [arrowhead=odot];
   p_sub -> orders [dir=both, label="previewed → submitted | refused"];
+  p_run -> p_notify [style=dashed, label="[after publish, success]"];
+  arts -> p_notify [arrowhead=odot]; notifcfg -> p_notify [arrowhead=odot, style=bold, label="[configured]"];
+  p_notify -> chat [label="message"];
   arts -> p_close [arrowhead=odot]; alpaca -> p_close [arrowhead=odot]; guard -> p_close [arrowhead=odot, style=bold];
 }

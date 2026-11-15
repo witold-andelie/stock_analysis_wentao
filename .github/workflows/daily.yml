@@ -39,6 +39,9 @@ env:
   DRIFTREV_DATA_DIR: ${{ github.workspace }}/project/data
   DRIFTREV_MAX_TICKERS: ${{ inputs.max_tickers || '0' }}
   SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}     # optional (R3 notifying)
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  DRIFTREV_WEBHOOK_URL: ${{ secrets.DRIFTREV_WEBHOOK_URL }}
   PYTHONPATH: src
 
 jobs:

@@ -1,0 +1,51 @@
+# Google Cloud Run service for the REST API (TEMPLATE, not deployed).
+# Replace PROJECT_ID, REGION, OWNER. Deploy: gcloud run services replace deploy/cloudrun/service.yaml --region REGION
+# Cloud Run cannot pull ghcr.io directly: use an Artifact Registry remote repo or copy the image
+# (see deploy/README.md). /data is a Cloud Storage FUSE volume; single instance = single DuckDB writer.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: driftrev-api
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"        # DuckDB: one writer/reader process
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 20
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/ghcr-remote/OWNER/driftrev:latest
+          command: ["uvicorn"]
+          args: ["driftrev.api:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DRIFTREV_DATA_DIR
+              value: /data
+            - name: DRIFTREV_API_TOKEN
+              valueFrom: {secretKeyRef: {name: driftrev-api-token, key: latest}}
+            - name: SEC_USER_AGENT
+              valueFrom: {secretKeyRef: {name: sec-user-agent, key: latest}}
+            # optional: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ALPACA_API_KEY, ALPACA_SECRET_KEY (paper)
+            - name: ALPACA_PAPER
+              value: "true"
+            - name: DRIFTREV_ALLOW_ORDERS
+              value: "false"
+          resources:
+            limits: {cpu: "1", memory: 2Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          startupProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 30
+      volumes:
+        - name: data
+          csi:
+            driver: gcsfuse.run.googleapis.com
+            volumeAttributes: {bucketName: driftrev-data}

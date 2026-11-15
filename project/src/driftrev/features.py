@@ -23,7 +23,10 @@ import logging
 import numpy as np
 import pandas as pd
 
-from . import config, indicators as ind, rolling_window as rw
+from . import config, consensus
+from . import indicators as ind
+from . import membership as mbr
+from . import rolling_window as rw
 
 log = logging.getLogger(__name__)
 S = config.SETTINGS
@@ -44,6 +47,7 @@ def market_context(market: pd.DataFrame, macro_wide: pd.DataFrame) -> pd.DataFra
     ctx["spy_ret_20d"] = spy.pct_change(20)
     ctx["spy_above_200"] = (spy > ind.sma(spy, 200)).astype(float)
     ctx["spy_dd_252"] = spy / spy.rolling(252, min_periods=60).max() - 1
+    ctx = ctx.join(correction_state(spy))
     iwm = close["IWM"].reindex(ctx.index)
     ctx["iwm_ret_1d"] = iwm.pct_change()
     ctx["iwm_ret_20d"] = iwm.pct_change(20)
@@ -75,6 +79,20 @@ def market_context(market: pd.DataFrame, macro_wide: pd.DataFrame) -> pd.DataFra
         if {"dgs10", "dgs2"} <= set(m.columns):
             ctx["curve_10y2y"] = m["dgs10"] - m["dgs2"]
     return ctx
+
+
+def correction_state(spy: pd.Series, threshold: float | None = None) -> pd.DataFrame:
+    """HW1 Q3: market correction = close >= `threshold` (5%) below the running all-time high.
+    Point-in-time: uses only closes up to t (running max, no centred windows).
+    Columns: correction_depth (<= 0, drawdown from ATH), in_correction (0/1),
+    days_in_correction (consecutive sessions in the current correction, 0 when not in one)."""
+    thr = config.SETTINGS.correction.threshold if threshold is None else threshold
+    depth = spy / spy.cummax() - 1
+    inc = depth <= -thr
+    grp = (~inc).cumsum()                       # a new group starts at every session outside a correction
+    days = inc.astype(int).groupby(grp).cumsum()
+    return pd.DataFrame({"in_correction": inc.astype(float), "correction_depth": depth,
+                         "days_in_correction": days.astype(float)}, index=spy.index)
 
 
 def _avg_pairwise_corr(rets: pd.DataFrame, window: int) -> pd.Series:
@@ -268,7 +286,7 @@ def edgar_features(events: pd.DataFrame, filings: pd.DataFrame) -> pd.DataFrame:
     df[cols + ["edgar_n_window"] + count_cols] = df[cols + ["edgar_n_window"] + count_cols].fillna(0).astype(int)
     df["edgar_category"] = "none"
     for name, rule in reversed(CATEGORY_ORDER):  # reversed so the first rule overwrites last
-        hit = df.apply(lambda r: bool(rule(r)), axis=1)
+        hit = df.apply(lambda r, rule=rule: bool(rule(r)), axis=1)
         df.loc[hit, "edgar_category"] = name
     df["edgar_items"] = df[list(ITEM_FLAGS.values())].apply(
         lambda r: ",".join(k for k, n in ITEM_FLAGS.items() if r[n]), axis=1)
@@ -344,12 +362,22 @@ def regime_table(ctx: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
 # Orchestration
 # --------------------------------------------------------------------------------------
 PANEL_COLS = ["ticker", "date", "open", "high", "low", "close", "volume", "ret_1d", "close_sma20", "close_sma50",
-              "close_sma200", "mom_12_1", "growth_20d", "dollar_vol_20", "vol_20d", "is_liquid", "is_crash"]
+              "close_sma200", "mom_12_1", "growth_20d", "dollar_vol_20", "vol_20d", "is_liquid", "is_crash", "in_index"]
 
 
 def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_wide: pd.DataFrame,
-              filings: pd.DataFrame, sue: pd.DataFrame, pageviews: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Returns (events, daily_panel, market_ctx_with_regime)."""
+              filings: pd.DataFrame, sue: pd.DataFrame, pageviews: pd.DataFrame,
+              membership: pd.DataFrame | None = None, consensus_eps: pd.DataFrame | None = None,
+              restrict_events: bool | None = None,
+              filing_text: pd.DataFrame | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Returns (events, daily_panel, market_ctx_with_regime).
+
+    membership: R1 membership_history -> point-in-time `in_index`; with `restrict_events` (default
+    Settings.membership.restrict_events) events are only generated while the stock was a member.
+    With no membership table every row counts as a member (old behaviour)."""
+    restrict = config.SETTINGS.membership.restrict_events if restrict_events is None else restrict_events
+    intervals = mbr.merged_intervals(membership) if membership is not None and len(membership) else None
+    buckets = mbr.bucket_intervals(membership) if intervals is not None else {}
     ctx = market_context(market, macro_wide)
     meta = uni.set_index("ticker")
     # cross-sectional prior strength (guide: top decile of 20d benchmark-relative return)
@@ -369,9 +397,14 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
         earn = earnings_days(filings, int(cik), f["date"].values) if pd.notna(cik) and not filings.empty else pd.DataFrame(columns=["date", "earn_accepted_et"])
         f = f.merge(earn, on="date", how="left")
         f["is_earnings"] = f["earn_accepted_et"].notna()
+        # point-in-time membership: a ticker without any interval row is treated as never a member
+        f["in_index"] = mbr.in_index_mask(f["date"], intervals.get(tkr, []) if intervals is not None else None)
+        if tkr in buckets:               # point-in-time cap bucket (the universe table only knows today's index)
+            f["cap_bucket_pit"] = mbr.cap_bucket_at(f["date"], buckets[tkr])
         panels.append(f[PANEL_COLS].astype({c: "float32" for c in PANEL_COLS[2:15]}))
         f["is_breakout"] = f["arm_a"] == 1
-        ev = f[(f["is_earnings"] | f["is_crash"] | f["is_breakout"]) & f["is_liquid"]].copy()
+        gate = f["is_liquid"] & (f["in_index"] if restrict else True)
+        ev = f[(f["is_earnings"] | f["is_crash"] | f["is_breakout"]) & gate].copy()
         if not ev.empty:
             ev["cik"] = cik
             events.append(ev)
@@ -399,19 +432,33 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
     ev["days_since_prev_event"] = ev.groupby("ticker")["date"].diff().dt.days
 
     # universe meta
-    ev = ev.merge(meta[["company", "sector", "sub_industry", "cap_bucket", "wikipedia_title"]].reset_index(), on="ticker", how="left")
+    keep_meta = ["company", "sector", "sub_industry", "cap_bucket", "wikipedia_title"] + (["is_current_member"] if "is_current_member" in meta else [])
+    ev = ev.merge(meta[keep_meta].reset_index(), on="ticker", how="left")
+    if "is_current_member" in ev:
+        ev["is_current_member"] = ev["is_current_member"].fillna(True).astype(bool)
+    if "cap_bucket_pit" in ev:
+        ev["cap_bucket"] = ev["cap_bucket_pit"].where(ev["cap_bucket_pit"].notna(), ev["cap_bucket"])
+        ev = ev.drop(columns="cap_bucket_pit")
     # EDGAR, attention, SUE
     if not filings.empty:
         ev = ev.join(edgar_features(ev[["ticker", "date", "cik", "prev_date", "next_date"]].dropna(subset=["cik"]).astype({"cik": "int64"}), filings))
+        ev["edgar_category"] = ev["edgar_category"].fillna("none")   # events without a CIK
+        # R4 (SD2.1): text flags + LM tone of the window's filings, refined category edgar_category_text
+        if filing_text is not None and not filing_text.empty:
+            from . import filing_text as ft
+            ev = ev.join(ft.attach_filing_text(ev.assign(cik=ev["cik"].astype("Int64")), filing_text, filings))
     att = attention_features(pageviews)
     if not att.empty:
         ev = ev.merge(att, on=["wikipedia_title", "date"], how="left")
     ev = ev.join(sue_features(ev, sue))
+    # analyst-consensus EPS surprise (HW1 Q4), point-in-time
+    ev = ev.join(consensus.consensus_features(ev, consensus_eps, ctx.index))
     # market context + regime
-    reg = regime_table(ctx, panel)
+    reg = regime_table(ctx, panel[panel["in_index"]] if restrict and intervals is not None else panel)  # breadth among members
     ctx = ctx.join(reg)
     ctx_cols = ["spy_ret_1d", "spy_ret_5d", "spy_ret_20d", "spy_above_200", "spy_dd_252", "iwm_ret_20d",
-                "small_vs_large_20d", "vix", "vix_chg_5d", "vix_term", "sector_corr_20d", "dgs10", "dgs2",
+                "small_vs_large_20d", "vix", "vix_chg_5d", "vix_term", "sector_corr_20d", "dgs10", "dgs5", "dgs2",
+                "in_correction", "correction_depth", "days_in_correction",
                 "fedfunds", "credit_spread", "credit_chg_20d", "curve_10y2y", "breadth_above_200", "crash_breadth",
                 "regime_points", "regime_state", "flag_trend", "flag_vix_term", "flag_corr", "flag_breadth", "flag_credit"]
     ev = ev.merge(ctx[[c for c in ctx_cols if c in ctx]].reset_index().rename(columns={"index": "date"}), on="date", how="left")

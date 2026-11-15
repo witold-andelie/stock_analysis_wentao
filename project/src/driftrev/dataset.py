@@ -58,26 +58,64 @@ NUMERIC = [
     # market & macro context
     "spy_ret_1d", "spy_ret_5d", "spy_ret_20d", "spy_above_200", "spy_dd_252", "iwm_ret_20d",
     "small_vs_large_20d", "vix", "vix_chg_5d", "vix_term", "sector_corr_20d", "dgs10", "dgs2",
-    "fedfunds", "credit_spread", "credit_chg_20d", "curve_10y2y", "breadth_above_200",
+    "dgs5", "fedfunds", "credit_spread", "credit_chg_20d", "curve_10y2y", "breadth_above_200",
     "crash_breadth", "regime_points",
+    # HW1 Q4: analyst-consensus EPS surprise (yfinance, matched point-in-time by consensus.py)
+    "eps_surprise_pct", "eps_beat", "eps_est_available", "eps_release_age_sessions",
+    # HW1 Q3: market correction state (SPY >= 5% below its running high)
+    "in_correction", "correction_depth", "days_in_correction",
+    # R4 filing text (SD2.1): flags + Loughran-McDonald tone of the event window's filings.
+    # Coverage: crash families all years; earnings 2022+ only (ft_text_available tells the model)
+    "ft_n_filings_window", "ft_n_text", "ft_text_available", "ft_guidance_cut", "ft_guidance_raise",
+    "ft_guidance_reaffirm", "ft_going_concern", "ft_offering_priced", "ft_restatement", "ft_material_weakness",
+    "ft_investigation", "ft_clinical_failure", "ft_exec_departure", "ft_covenant", "ft_impairment", "ft_layoffs",
+    "ft_bankruptcy", "ft_beat", "ft_miss", "ft_lm_negative_pct", "ft_lm_positive_pct", "ft_lm_uncertainty_pct",
+    "ft_lm_net_tone", "ft_offering_discount",
+    # NOTE: in_index / is_current_member are bookkeeping for the point-in-time universe, never features
 ]
 
+# --- research: "which, not when" ---------------------------------------------------------
+# Market-level inputs are identical for every event on a date, so a pooled model can only use
+# them to time the market. Dropping them (plus calendar dummies) leaves stock-level information.
+MARKET_NUMERIC = [
+    "spy_ret_1d", "spy_ret_5d", "spy_ret_20d", "spy_above_200", "spy_dd_252", "iwm_ret_20d",
+    "small_vs_large_20d", "vix", "vix_chg_5d", "vix_term", "sector_corr_20d", "dgs10", "dgs2", "dgs5",
+    "fedfunds", "credit_spread", "credit_chg_20d", "curve_10y2y", "breadth_above_200", "crash_breadth",
+    "regime_points", "in_correction", "correction_depth", "days_in_correction",
+]
+MARKET_DUMMY_PREFIXES = ("month_", "weekday_", "regime_state_", "bin_vix_")   # month_wom_ starts with month_
+# stock-level numerics that get a per-date percentile rank (cs_rank_*) and a date-demeaned copy (cs_dm_*)
+CS_COLS = [
+    "ret_1d", "abn_ret_1d", "ret_vs_sector", "gap_open", "range_pct", "close_loc", "volume_mult", "volume_z",
+    "growth_5d", "growth_20d", "growth_60d", "mom_12_1", "rs_vs_spy_60d", "dist_52w_high", "dist_52w_low",
+    "rsi_14", "bb_pctb", "vol_20d", "atr_pct", "beta_252", "idio_vol_60", "log_dollar_vol", "sue",
+    "att_ratio_7_90", "rw_dev_20", "rw_prior_strength", "momentum_blend", "prev_ear", "prev_pead_20d",
+    "close_sma50", "close_sma200", "eps_surprise_pct",
+]
+FEATURE_SETS = ("pooled", "pooled_wom", "cs_keep_market", "cs_drop_market")
+
 CATEGORICAL = [
-    "event_family", "edgar_category", "sector", "cap_bucket", "month", "weekday", "regime_state",
+    "event_family", "edgar_category", "edgar_category_text", "sector", "cap_bucket", "month", "weekday", "regime_state",
     # engineered bins (manual transformations -> dummies)
     "bin_reaction", "bin_rsi", "bin_sue", "bin_52w", "bin_vix", "bin_attention", "bin_momentum",
+    "month_wom",                       # HW3: month x week-of-month dummies (calendar, market-level)
 ]
 
 TO_DROP = ["ticker", "date", "company", "sub_industry", "wikipedia_title", "cik", "prev_date", "next_date",
            "earn_accepted_et", "edgar_items", "open", "high", "low", "close", "volume", "dollar_vol_20",
-           "is_liquid", "is_crash", "is_earnings", "is_breakout", "sue_is_current", "rw_median_dollar_vol"]
+           "is_liquid", "is_crash", "is_earnings", "is_breakout", "sue_is_current", "rw_median_dollar_vol",
+           "in_index", "is_current_member"]
 
 
 def add_engineered(df: pd.DataFrame) -> pd.DataFrame:
     """Binned / manual features (each bin set counts as one engineered feature)."""
     d = df.copy()
+    if "edgar_category_text" not in d:  # snapshots built before R4 have no text layer
+        d["edgar_category_text"] = d.get("edgar_category", "none")
+    d["edgar_category_text"] = d["edgar_category_text"].fillna(d.get("edgar_category", "none"))
     d["month"] = d["date"].dt.month_name()
     d["weekday"] = d["date"].dt.day_name()
+    d["month_wom"] = d["date"].dt.month_name().str[:3] + "_w" + ((d["date"].dt.day - 1) // 7 + 1).astype(str)
     d["bin_reaction"] = pd.cut(d["abn_ret_1d"], [-np.inf, -0.20, -0.10, -0.03, 0.03, 0.10, np.inf],
                                labels=["crash_lt_-20", "drop_-20_-10", "down_-10_-3", "flat", "up_3_10", "jump_gt_10"]).astype(str)
     d["bin_rsi"] = pd.cut(d["rsi_14"], [-np.inf, 20, 30, 50, 70, np.inf],
@@ -109,8 +147,17 @@ def make_dummies(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
 
 
 def temporal_split(dates: pd.Series) -> pd.Series:
+    """train <= train_end < validation <= valid_end < test. With `Split.purge` (default) the rows whose label
+    window (`purge_days` calendar days ~ 10 sessions) reaches past the end of their block are labelled
+    "purged": their outcome is realised inside the NEXT block, so fitting on them would leak it."""
     s = S.split
-    return pd.Series(np.select([dates <= s.train_end, dates <= s.valid_end], ["train", "validation"], "test"), index=dates.index)
+    sp = pd.Series(np.select([dates <= s.train_end, dates <= s.valid_end], ["train", "validation"], "test"),
+                   index=dates.index, dtype=object)
+    if s.purge:
+        gap = pd.Timedelta(days=s.purge_days)
+        sp[(sp == "train") & (dates > pd.Timestamp(s.train_end) - gap)] = "purged"
+        sp[(sp == "validation") & (dates > pd.Timestamp(s.valid_end) - gap)] = "purged"
+    return sp
 
 
 def prepare(events: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
@@ -125,11 +172,52 @@ def prepare(events: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     ml = pd.concat([d[keep].reset_index(drop=True), X.reset_index(drop=True), dummies.reset_index(drop=True)], axis=1)
     ml = ml.loc[:, ~ml.columns.duplicated()]
     ml["split"] = temporal_split(ml["date"])
-    features = num + dummy_cols
-    return ml, features
+    ml = add_cross_sectional(ml)
+    return ml, feature_sets(ml)[config.SETTINGS.research.feature_set]
 
 
 def fill_for_model(X: pd.DataFrame) -> pd.DataFrame:
     """Course convention: inf -> NaN -> 0 (trees are fine with the sentinel; the
     `*_known` information is carried by the dummies / counts)."""
     return X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+
+def add_cross_sectional(ml: pd.DataFrame, cols: list[str] | None = None, min_events: int = 3) -> pd.DataFrame:
+    """Per-date cross-sectional copies of stock-level numerics (point-in-time: only events of the
+    SAME date, i.e. information known at that close, are compared with each other).
+
+    cs_rank_<c>  percentile rank in (0, 1] among the events of the date (0.5 when fewer than
+                 `min_events` events share the date, where a rank is meaningless)
+    cs_dm_<c>    value minus the date mean (0 when the value is missing)
+    Each event only sees its own date, so shuffling other dates cannot change a row's values."""
+    cols = [c for c in (cols or CS_COLS) if c in ml.columns]
+    out = ml.drop(columns=[c for c in ml.columns if c.startswith(("cs_rank_", "cs_dm_"))])
+    if not cols:
+        return out
+    g = out.groupby("date")[cols]
+    rank = g.rank(pct=True)
+    n_day = out.groupby("date")["date"].transform("size")
+    rank = rank.where(n_day >= min_events, 0.5).fillna(0.5).add_prefix("cs_rank_").astype("float32")
+    dm = (out[cols] - g.transform("mean")).replace([np.inf, -np.inf], np.nan).fillna(0.0).add_prefix("cs_dm_").astype("float32")
+    return pd.concat([out, rank, dm], axis=1)
+
+
+def feature_sets(ml: pd.DataFrame) -> dict[str, list[str]]:
+    """Named feature lists over one ML frame (the same columns, different subsets).
+
+    pooled          the original set: stock-level + market-level numerics + dummies (no month_wom)
+    pooled_wom      pooled + HW3 month_wom dummies
+    cs_keep_market  pooled + cross-sectional ranks/demeaned copies
+    cs_drop_market  stock-level + cross-sectional only (no market-level numerics, no calendar /
+                    regime / VIX-bin dummies): the model cannot time the market"""
+    non_target = [c for c in ml.columns if c not in TO_PREDICT]
+    num = [c for c in numeric_features() if c in ml.columns]
+    dummies = [c for c in non_target if c not in num and any(c.startswith(f"{k}_") for k in CATEGORICAL)]
+    wom = [c for c in dummies if c.startswith("month_wom_")]
+    base_dummies = [c for c in dummies if c not in wom]
+    cs = [c for c in ml.columns if c.startswith(("cs_rank_", "cs_dm_"))]
+    pooled = num + base_dummies
+    stock_num = [c for c in num if c not in MARKET_NUMERIC]
+    stock_dummies = [c for c in base_dummies if not c.startswith(MARKET_DUMMY_PREFIXES)]
+    return {"pooled": pooled, "pooled_wom": pooled + wom, "cs_keep_market": pooled + cs,
+            "cs_drop_market": stock_num + stock_dummies + cs}

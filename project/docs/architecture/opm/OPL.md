@@ -38,11 +38,21 @@ Status tags: ✅ implemented · 🟡 implemented with a known limitation · ⬜ 
 ## SD1 · Acquiring in-zoomed (`SD1_acquiring.dot`)
 
 **Acquiring** zooms into **Refreshing Universe**, **Loading Macro**, **Loading Market Series**,
-**Loading Prices**, **Loading Filings & EPS** and **Loading Attention**, in that sequence.
-**Warehouse** consists of **universe**, **prices**, **market**, **macro**, **filings**, **eps_facts**,
-**pageviews** and **edgar_fetch_log**.
+**Loading Prices**, **Loading Filings & EPS**, **Loading Attention** and **Loading Consensus EPS**.
+**Loading Historical Membership** runs right after **Refreshing Universe**.
+**Warehouse** consists of **universe**, **membership_history**, **prices**, **market**, **macro**, **filings**,
+**eps_facts**, **pageviews**, **consensus_eps** and **edgar_fetch_log**.
 
-- **Refreshing Universe** requires **Wikipedia S&P lists** and **SEC EDGAR** (ticker→CIK) and affects **universe**. ✅ 🟡 current constituents only (survivorship bias, see R1)
+- **Refreshing Universe** requires **Wikipedia S&P lists** and **SEC EDGAR** (ticker→CIK) and affects **universe**
+  (*is_current_member* = true for today's constituents). ✅
+- **Loading Historical Membership** (R1, `membership.py`) requires **Wikipedia S&P lists** (the "Historical components of
+  the S&P 500/400/600" change tables), **SEC EDGAR** and **Yahoo Finance**. It reconstructs **membership_history**
+  (ticker, index_name, start_date, end_date; member iff start ≤ date < end) backwards from today's constituents and
+  the added/removed rows, adds removed names to **universe** with *is_current_member* = false (cap bucket from the index
+  they left, sector from SEC SIC, CIK via company_tickers then the EDGAR company search with a name check against
+  ticker reuse), and affects **prices** for removed names whose ticker Yahoo still serves (clipped to the membership
+  window + 45 days). ✅ 🟡 reduces but does not remove survivorship bias: the S&P 600 table starts 2019-12, the S&P 400
+  table 2012, delisted names Yahoo no longer serves stay missing, and renamed tickers are unresolved.
 - **Loading Macro** requires **FRED** and affects **macro**; it re-pulls the last 60 days because FRED revises. ✅
 - **Loading Market Series** requires **Yahoo Finance** and affects **market**. ✅
 - **Loading Prices** requires **universe** and **Yahoo Finance** and affects **prices**. It downloads only from
@@ -53,6 +63,9 @@ Status tags: ✅ implemented · 🟡 implemented with a known limitation · ⬜ 
   and older submission pages are cached forever. ✅
 - **Loading Attention** requires **universe**, **Wikimedia pageviews API**, **Contact User-Agent** and
   **Rate Limiters**, and affects **pageviews**. ✅
+- **Loading Consensus EPS** (HW1 Q4, `consensus.py`) requires **universe** and **Yahoo Finance** (`get_earnings_dates`)
+  and affects **consensus_eps** (release timestamp, EPS estimate, reported EPS, surprise %). It is incremental
+  (tickers refreshed in the last 7 days are skipped) and tolerates rate limits, so coverage is partial by design. ✅
 
 ## SD2 · Transforming in-zoomed (`SD2_transforming.dot`)
 
@@ -64,7 +77,16 @@ pageviews are lagged one row. Targets use *t+1 … t+H* only.
 - **Ranking Prior Strength** requires **prices** and **Market Context**. It takes the cross-sectional
   percentile of D(t,20) among names with a 20-session median dollar volume of at least $10m, then the
   maximum over *t−10 … t−1*. ✅
-- **Computing Ticker Features** requires **prices**, **Market Context** and **universe**, and yields **Daily Panel**. ✅
+- **Computing Ticker Features** requires **prices**, **Market Context** and **universe**, and yields **Daily Panel**. The
+  event's *cap_bucket* is the index the stock sat in on that date (from **membership_history**), not today's index. ✅
+- **Flagging Index Membership** (R1) requires **membership_history** and **Settings** (`Membership.restrict_events`,
+  default on). It adds the point-in-time *in_index* flag (member of any of the three indices on that date) to
+  **Daily Panel** and **Event Dataset**, and **Detecting Events** keeps only rows where *in_index* holds. ✅
+- **Tracking Market Correction** (HW1 Q3) requires **market** and affects **Market Context**: SPY *in_correction*
+  (close ≥ 5% below its running all-time high), *correction_depth* and *days_in_correction*, all point-in-time. ✅
+- **Attaching Consensus Surprise** (HW1 Q4) requires **consensus_eps** and affects **Event Dataset**: *eps_surprise_pct*,
+  *eps_beat*, *eps_est_available* from the earnings release within ±3 sessions of the event, using only releases
+  stamped on or before the event day's close. ✅
 - **Computing Rolling-Window State** (strategy guide, Variant B) produces D(t,L), M(t,W), the flat-path
   Release(j) = M(t,W) − max(0, M(t,W−j)), the setup state and arm flags A/B/C. ✅
 - **Dating Earnings Releases** requires **filings**. An 8-K Item 2.02 accepted at or after 16:00 ET maps to
@@ -84,11 +106,53 @@ pageviews are lagged one row. Targets use *t+1 … t+H* only.
   *elevated* or *stressed*. One point each for: SPY below its 200-day MA, VIX/VIX3M > 1, sector-correlation
   percentile > 0.9, breadth below 40%, and a Baa−10y spread rise of more than 25 bp in 20 days. ✅
 
+- **Classifying Filing Text** (in-zoomed in SD2.1) requires **filing_text** and **filings** and affects
+  **Event Dataset** with `ft_*` flags, Loughran–McDonald tone and `edgar_category_text`, which refines
+  `edgar_category` (e.g. earnings → guidance cut / raise; going concern; offering priced). It is wired into
+  `features.build_all`, and its fetch runs in `pipeline.ingest` with a time budget (`DRIFTREV_FILING_TEXT_MAX_SECONDS`). ✅
+
+## SD2.1 · Classifying Filing Text in-zoomed (`SD2.1_classifying_filing_text.dot`)
+
+R4, `driftrev.filing_text`. A deterministic, explainable text layer (regex lexicon + Loughran-McDonald tone, no LLM,
+no paid API) on top of the 8-K item codes of SD2: it separates "earnings + guidance cut" from "earnings +
+beat-and-raise" and says whether a 424B prospectus actually priced an offering (and at what discount).
+Invariant: only filings accepted inside the event window (previous close 16:00 ET .. next morning 09:00 ET) are used.
+
+- **Selecting Target Filings** requires **filings**, **Event Dataset** and **Text Scope**, and reads **filing_text**
+  (already fetched accessions are skipped, so a run is incremental and resumable). Scope: every 8-K, 8-K/A, 424B* and
+  NT 10-K/Q accepted in the window of a *shock_crash* or *earnings_crash* event (all years), plus the 8-K Item 2.02 of
+  *earnings_up* / *earnings_down* events from 2022-01-01 (validation + test). A per-run budget caps the number of filings. ✅
+- **Fetching Press Releases** requires **SEC EDGAR Archives**, **Contact User-Agent** and **Rate Limiter** (≤ 8 req/s,
+  404-tolerant, retries). It reads the filing index, picks EX-99.1, else EX-99 (or another EX-99.x), else the primary
+  document, and downloads it (8-Ks with substantive items also read the primary document). ✅
+- **Converting HTML to Text** yields **Exhibit Text Cache** (gzip, capped length). ✅
+- **Flagging Lexicon Phrases** requires **Exhibit Text Cache** and affects **filing_text**: the **Lexicon Flags**
+  guidance_cut, guidance_raise, guidance_reaffirm, going_concern, offering_priced (+ stated price, last price,
+  discount), restatement, material_weakness, investigation, clinical_failure, exec_departure, covenant, impairment,
+  layoffs, bankruptcy, beat and miss, each with a negation guard and a matched snippet. ✅
+- **Scoring Tone** requires **Exhibit Text Cache** and **Loughran-McDonald Dictionary** (downloaded once; a curated
+  fallback list is embedded) and affects **filing_text**: **Tone Scores** lm_negative_pct, lm_positive_pct,
+  lm_uncertainty_pct and lm_net_tone of the main exhibit. ✅
+- **filing_text** exhibits **Lexicon Flags** and **Tone Scores**; a row with status *no_index*, *no_doc* or *error*
+  records a failed fetch (only *error* is retried). ✅
+- **Attaching Text Flags to Events** requires **filing_text**, **Event Dataset** and **filings** and yields the
+  *ft_** columns (any flag across the window's filings, tone of the main exhibit) and **edgar_category_text**
+  (earnings split into earnings_guidance_cut / earnings_guidance_raise / earnings_guidance_mixed / earnings_other,
+  plus going_concern, clinical_failure, offering_priced, investigation). `features.build_all` joins it by index (integration step). ✅
+- **Studying Text Flags** requires **filing_text** and **Event Dataset** and yields **filing_text_study**: n, base rate,
+  mean / median 10-day return, mean vs SPY and a bootstrap 95% CI per flag, split by family and period. ✅
+
 ## SD3 · Researching in-zoomed (`SD3_researching.dot`)
 
+- **Engineering Cross-sectional Features** requires **ML Frame** and adds, per event date, the percentile rank
+  (`cs_rank_*`) and the date-demeaned value (`cs_dm_*`) of about 30 stock-level numerics. Only same-date
+  information is used, so it is point-in-time. A *market-level set* (SPY/VIX/rates/breadth, month, weekday,
+  regime and `month_wom` dummies) can be dropped so the model must pick *which* stock, not *when*. ✅
 - **Preparing Feature Sets** consumes **Event Dataset** and yields **ML Frame**, with columns TO_PREDICT,
   NUMERIC and DUMMIES (7 categoricals plus 7 engineered bins), split into *train* (to 2021),
-  *validation* (2022–23), *test* (2024 →) and *live*. ✅
+  *validation* (2022–23), *test* (2024 →) and *live*. The split is **purged**: rows whose 10-session label window
+  (16 calendar days, `Split.purge_days`) reaches past the end of train or validation are labelled *purged* and used
+  by nothing (fitting, thresholds, metrics), so no label is realised inside the next block. ✅
 - **Applying Hand Rules** requires **ML Frame** and yields **Predictions**: HW1 PEAD + momentum,
   HW5 panic-no-damage, all events, and guide arms A/B/C. ✅
 - **Tuning** requires **ML Frame** (TRAIN fit, VALIDATION score) and yields **Tuning Table**. ✅
@@ -96,14 +160,36 @@ pageviews are lagged one row. Targets use *t+1 … t+H* only.
   on TRAIN+VALIDATION: DecisionTree, RandomForest, XGBoost, LightGBM, LogisticRegression, and an
   RF/XGB/LGBM ensemble. ✅
 - **Choosing Thresholds** affects **Predictions**. Each threshold is the highest-precision cut-off on
-  VALIDATION that still trades at least 5% of events. ✅
+  VALIDATION that still trades at least 5% of events and, when a capacity is configured (HW4), whose
+  average trades per day does not exceed it. ✅
+- **Comparing Model Variants** requires **ML Frame** and yields **Model Comparison**: pooled model, pooled +
+  cross-sectional features (market-level features kept or removed), per-family models, and a LightGBM
+  `lambdarank` ranker grouped by date. Every row is scored on VALIDATION (train-only fit; this picks the winner)
+  and on TEST (refit on train+validation; reported only, never used to choose). ✅
+- **Composing the Book** requires **Predictions** and yields **Book Rules** (excluded event families and EDGAR
+  categories for the model book). Each exclusion is decided on VALIDATION precision lift and VALIDATION exact
+  simulation; the guide arms remain a separate rule-based sleeve. ✅
+- **Walk-forward Retraining** (R2) requires **ML Frame**, **Daily Panel** and **Cost Model** and yields
+  **Walk-forward Track Record**. For every year Y it refits on events whose 10-day label closed before Y
+  (expanding window), takes the threshold from the previous year (fit on data before it), predicts Y, and the
+  stitched out-of-sample predictions drive an exact simulation. This is the honest track record. ✅
+- **Studying Holding Periods and Uniquely-correct Predictions** requires **ML Frame** and **Predictions** and
+  yields the HW2-Q3 style median/mean growth at 5/10/20 sessions per family and the HW3 uniquely-correct table.
+  It is a report only; the 10-day target is unchanged. ✅
+- **Production decisions (VALIDATION, config.Research)**: feature set `cs_drop_market`; pooled layout (per-family and
+  lambdarank did not beat it); model book excludes `momentum_breakout` and EDGAR `offering` (`mgmt_change` is kept:
+  its VALIDATION precision is 71%); capacity cap of 5 average trades per active day in the threshold rule. ✅
+- **Checking Library Version** warns when scikit-learn is 1.8 or newer (HW4 lesson: random-forest
+  probabilities change near thresholds) and logs the versions into **Backtest Report**. ✅
 - **Selecting Production Model** yields **Model Bundle** (best VALIDATION AUC; TEST is never used to choose). ✅
+- **Cost Model** is cap-aware: one-way 8 bps (large), 15 bps (mid), 25 bps (small); a flat 15 bps option
+  remains for comparison. ✅
 - **Vector Simulating** requires **Predictions** and **Cost Model** and yields **Backtest Report** (sim1 and sim2). ✅
 - **Exact Simulating** requires **Predictions**, **Daily Panel** and **Cost Model** and yields
   **Backtest Report**. It runs a daily loop with cash, reinvestment, a position cap, stops, targets,
   time exits, the regime pause, a long-short variant and the guide's R framework. ✅
 - **Benchmarking** requires **market** and **Daily Panel** and yields **Backtest Report**: SPY and IWM
-  buy-and-hold, and the HW1 momentum top quintile. ✅
+  buy-and-hold, and the HW1 momentum top quintile (point-in-time index members only, like the model's events). ✅
 - **Testing Guide Arms** requires **ML Frame** and the exact simulations. It yields **Backtest Report**
   (four-arm table, sensitivity grid, 1×/2×/3× cost stress) and changes **Window-Release Factor** to
   *kept* or *discarded*. Arm D is not applicable to US equities. ✅
@@ -112,9 +198,10 @@ pageviews are lagged one row. Targets use *t+1 … t+H* only.
 ## SD4 · Signalling Event Trades in-zoomed (`SD4_signalling.dot`)
 
 - **Scoring Events** requires **ML Frame** (last 90 days) and **Model Bundle** and yields **Signal**.*prob*. ✅
-- **Estimating Net Edge** requires **TEST Predictions** and affects **Signal**.*expected_net_return*
-  (the TEST probability-decile mean minus the round-trip cost). ✅
-- **Tiering** requires **Market Context** and the **Model Bundle** threshold. It changes **Signal** to one of
+- **Estimating Net Edge** requires **TEST Predictions** and **Cost Model** and affects **Signal**.*expected_net_return*
+  (the TEST probability-decile mean minus the round-trip cost of the stock's cap bucket). ✅
+- **Tiering** requires **Market Context**, **Cost Model**, **Book Rules** and the **Model Bundle** threshold.
+  Events of an excluded family or EDGAR category are SKIP in the model book. It changes **Signal** to one of
   *STRONG_BUY, BUY, WATCH, SKIP, AVOID, NO_CALL*. An *elevated* regime lowers STRONG_BUY by one notch;
   a *stressed* regime lowers STRONG_BUY and BUY by one notch. ✅
 - **Sizing & Setting Exits** requires **Strategy Settings** and affects **Signal** (weight, stop,
@@ -132,6 +219,9 @@ allows a single writer process.
 - **Personal 24/7 Agent** handles **Briefing**, which requires **xAI chat completions** and **tools.json**
   and invokes **Authenticating** through HTTP tool calls. ✅ (live xAI call not yet verified)
 - **Authenticating** changes **Request** to *authorised* or *rejected* (bearer token, constant-time compare). ✅
+- **Answering Research Questions** (`GET /v1/research`, MCP `get_research`) requires **Artifact Store**
+  and returns the research tables: model comparison, book composition, walk-forward track record,
+  holding periods, uniquely-correct predictions, guide arms, survivorship. [SRV] ✅
 - **Answering Queries** occurs if **Request** is *authorised*. It requires **REST API**, **MCP server** and
   **Artifact Store**. It invokes **Running Pipeline** and **Previewing Orders**. ✅
 - **Scheduling** is handled by **Market Calendar** and invokes **Running Pipeline** at 22:30 ET, Monday to Friday. ✅
@@ -142,6 +232,9 @@ allows a single writer process.
 - **Submitting Orders** occurs only if **Order Guard** holds (`confirm=true` and `DRIFTREV_ALLOW_ORDERS=true`).
   It requires **Alpaca API** (paper) and changes **Order Set** from *previewed* to *submitted* or *refused*.
   It is not exposed as an agent tool. ✅ (not run against a live Alpaca account)
+- **Running Pipeline** invokes **Notifying** after a successful publish. **Notifying** occurs if **Notification
+  Settings** are configured; it requires **Artifact Store** and sends a message (data date, regime, signals at
+  or above `NOTIFY_MIN_TIER`, with stop / target / exit date) to **Telegram chat / webhook receiver**. [SRV] ✅
 - **Closing Expired Positions** requires **Artifact Store**, **Alpaca API** and **Order Guard**. ✅
 
 ## SD7 · CI/CD and Housekeeping (`SD7_cicd.dot`)
@@ -161,20 +254,28 @@ in **Run Artifacts** that expire, and in one rolling **Snapshot Release Asset**.
 - **Releasing Snapshot** (Sunday) replaces the single **Snapshot Release Asset** used by `--mode file`. [OPS] ✅
 - **Housekeeping Data Files** (`python -m driftrev.housekeeping`) requires **Retention Policy** and changes
   **Data Files** from *current* to *deleted*: EDGAR root JSONs older than 2 days, EDGAR history pages
-  older than 180 days, the daily signal archive older than 60 days, snapshot zips except the newest,
+  older than 180 days, raw filing text older than 30 days (flags and tone stay in the warehouse), the daily signal archive older than 60 days, snapshot zips except the newest,
   run-log lines beyond 1000, and cron logs beyond 5 MB. It is invoked after every pipeline run. [OPS] ✅
+- **Publishing Container Image** (`image.yml`) occurs on a push to `main` touching `project/**` (or manually). It
+  requires **Build Status** *passing*, **GitHub Actions runner** and **GitHub Container Registry**, and changes
+  **Container Image** from *unpublished* to *published* (`:latest` and `:sha-<short>`), then runs the pushed image
+  and imports the package. [OPS] ✅
+- **Operator** handles **Deploying API (optional)** manually. It requires a published **Container Image**, **Cloud
+  Targets** (Google Cloud Run, Fly.io or Render manifests in `project/deploy/`), a **Persistent Volume** for `/data`
+  (single DuckDB writer) and **Repository Secrets** equivalents (`DRIFTREV_API_TOKEN`, `SEC_USER_AGENT`), and changes
+  **Hosted API** from *not deployed* to *serving* (health check `/health`). Templates only; never run by CI. [OPS] ⬜ (not deployed)
 - **GitHub Scheduler** handles **Garbage-collecting GitHub** weekly (`cleanup.yml`). It requires
   **Retention Policy**, changes **Data Cache** and **Run Artifact** entries older than their retention to
   *expired* (deleted), deletes workflow runs older than 30 days, and keeps only the latest snapshot asset. [OPS] ✅
 
 ## SD6 · Roadmap (`SD6_roadmap.dot`), PLANNED
 
-- ⬜ **R1 Loading Historical Membership** yields **membership_history** and affects **universe**
-  (removes survivorship bias; required before claiming the crash results generalise).
-- ⬜ **R2 Walk-forward Retraining** affects **Backtest Report** (yearly expanding refit, stitched OOS equity).
-- ⬜ **R3 Notifying** occurs after **Signalling** and requires **Signal Book** (Telegram or e-mail push).
-- ⬜ **R4 Classifying Filing Text** feeds **Transforming** (8-K EX-99.1 guidance language, going-concern phrases).
-- ⬜ **R5 Cloud Deploying the API** affects **Serving** (container VM / Cloud Run). Batch CD and the
-  Pages results site are already implemented in SD7.
+- ✅ **R1 Loading Historical Membership** yields **membership_history** and affects **universe**
+  (reduces survivorship bias; now documented in SD1 and SD2; see the gaps listed under SD1).
+- ✅ **R2 Walk-forward Retraining** is implemented, see SD3 (**Walk-forward Retraining**).
+- ✅ **R3 Notifying**: implemented, now part of SD5 (`driftrev.notify`, Telegram Bot API + JSON webhook).
+- ✅ **R4 Classifying Filing Text** feeds **Transforming**: implemented, see SD2.1 (`driftrev.filing_text`; EX-99.1 guidance language, going-concern phrases, tone).
+- ✅ **R5 Cloud Deploying the API** (packaging) affects **Serving**: the image is published to GHCR and manifests
+  for Cloud Run, Fly.io and Render exist (SD7, `project/deploy/`). The deploy itself is a manual **Operator** step;
+  nothing is deployed by this repository.
 - ⬜ **R6 Confirming Intraday Entry** feeds **Signalling** (guide Entry B with intraday bars).
-- ⬜ **R7 Extending to Other Markets** feeds **Transforming** (guide Variant A for eligible China A-shares).

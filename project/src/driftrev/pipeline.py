@@ -22,16 +22,35 @@ import argparse
 import io
 import json
 import logging
-import shutil
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
 
-from . import (analysis, artifacts, attention, config, dataset, edgar, features, housekeeping, macro, models, prices,
-               report, signals, simulate, store, universe)
+from . import (
+    analysis,
+    artifacts,
+    attention,
+    config,
+    consensus,
+    dataset,
+    edgar,
+    features,
+    housekeeping,
+    macro,
+    membership,
+    models,
+    prices,
+    report,
+    research,
+    signals,
+    simulate,
+    store,
+    universe,
+    walkforward,
+)
 
 log = logging.getLogger("driftrev.pipeline")
 S = config.SETTINGS
@@ -44,11 +63,19 @@ SNAP_FILES = ("events", "panel", "market", "universe", "ctx")
 def ingest(refresh_universe: bool = False) -> dict:
     uni = universe.load_or_fetch(refresh=refresh_universe or not store.table_exists("universe"))
     report = {"universe": len(uni)}
+    report["membership"] = membership.update_membership()     # R1: change tables, removed names, their prices
+    uni = universe.load_or_fetch()                             # now includes removed names (is_current_member=False)
+    cur = uni[uni["is_current_member"].fillna(True).astype(bool)] if "is_current_member" in uni else uni
+    report["universe"] = len(uni)
     report["macro"] = macro.update_macro()
     report["market"] = prices.update_market()
-    report["prices"] = prices.update_prices(uni["ticker"].tolist())
+    report["prices"] = prices.update_prices(cur["ticker"].tolist())   # removed names are clipped by membership.py
     report["edgar"] = edgar.update_edgar(uni["cik"].dropna().astype(int).tolist())
     report["pageviews"] = attention.update_pageviews(uni["wikipedia_title"].dropna().tolist())
+    report["consensus"] = consensus.update_consensus(uni["ticker"].tolist())
+    # R4: classify new filing texts (resumable; budget keeps daily CI runs short)
+    from . import filing_text
+    report["filing_text"] = filing_text.ingest(max_seconds=config.FILING_TEXT_MAX_SECONDS)
     report["prices"]["failed"] = report["prices"]["failed"][:20]
     report["edgar"]["errors"] = dict(list(report["edgar"]["errors"].items())[:10])
     return report
@@ -61,7 +88,9 @@ def transform() -> dict[str, pd.DataFrame]:
     uni = universe.load_or_fetch()
     ev, panel, ctx = features.build_all(
         uni, prices.load_prices(), prices.load_market(), macro.load_macro_wide(),
-        edgar.load_filings(), edgar.sue_table(edgar.load_eps_facts()), attention.load_pageviews())
+        edgar.load_filings(), edgar.sue_table(edgar.load_eps_facts()), attention.load_pageviews(),
+        membership=membership.load_membership(), consensus_eps=consensus.load_consensus(),
+        filing_text=store.read_table("filing_text"))
     ctx = ctx.rename_axis("date").reset_index()
     store.replace_table("events", ev)
     store.replace_table("daily_panel", panel)
@@ -105,7 +134,11 @@ def load_snapshot() -> dict[str, pd.DataFrame]:
 # Step 3-4: train + backtest
 # --------------------------------------------------------------------------------------
 def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, market: pd.DataFrame,
-                       tune: bool = False) -> dict:
+                       tune: bool = False, with_walkforward: bool = True, with_comparison: bool | None = None) -> dict:
+    rs = S.research
+    versions = models.check_sklearn_version()           # HW4 lesson: warn on scikit-learn >= 1.8, log versions
+    ml = dataset.add_cross_sectional(ml) if not any(c.startswith("cs_rank_") for c in ml.columns) else ml
+    feats = dataset.feature_sets(ml)[rs.feature_set]    # production feature set is a config choice (VALIDATION)
     tuning_path = config.ARTIFACTS_DIR / "tuning.parquet"
     if tune or not tuning_path.exists():
         tuning = models.tune(ml, feats)
@@ -113,11 +146,19 @@ def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, 
     tuning = pd.read_parquet(tuning_path)
     tuning["params"] = tuning["params"].map(json.loads)
     best = models.best_params(tuning)
+    cmp_path = config.ARTIFACTS_DIR / "model_comparison.parquet"
+    if with_comparison or (with_comparison is None and (tune or not cmp_path.exists())):
+        artifacts.save_frame("model_comparison.parquet", research.model_comparison(ml, best))
+    comparison = artifacts.load_frame("model_comparison.parquet")
     out, info = models.fit_final(ml, feats, best)
     prod = models.choose_production(info)
     thr = info["thresholds"][prod]
     prob_col = f"proba_{prod}"
     models.save_bundle(info, feats, prod)
+    # model book composition (config.research.book_exclude_*): the exclusion is part of the production rule
+    in_book = ~out["event_family"].isin(rs.book_exclude_families) & ~out["edgar_category"].isin(rs.book_exclude_categories)
+    rule_col = next(c for c in out.columns if f"_{prod}_best_rule_" in c)
+    out[f"pred_book_{prod}_rule_{int(round(thr * 100))}"] = out[rule_col] * in_book.astype(int)
 
     test = out[(out["split"] == "test")]
     known_test = test[test[dataset.TARGET].notna()]
@@ -144,6 +185,7 @@ def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, 
         curves.append(eq.rename("equity").rename_axis("date").reset_index().assign(strategy=cfg.name))
         trades.append(tr)
     guide = guide_analysis(test, ml, panel, start, cfgs, strat, spy)
+    research_block = research_artifacts(out, panel, test, start, prod, thr, cfgs, comparison, versions)
     end = panel["date"].max()
     bench_series = [simulate.buy_and_hold(market, "SPY", start, end, S.strategy.initial_capital),
                     simulate.buy_and_hold(market, "IWM", start, end, S.strategy.initial_capital),
@@ -175,9 +217,90 @@ def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, 
                   "n_features": len(feats), "split_sizes": split_sizes},
         "models": [{"name": k, "val_auc": info["val_auc"][k], "test_auc": info["test_auc"][k], "threshold": info["thresholds"][k],
                     "params": info["params"].get(k)} for k in info["val_auc"]],
-        "strategies": strat, "benchmarks": benchmarks, "guide": guide,
-        "best_strategy": max(strat, key=lambda s: s.get("cagr") or -9)["name"] if strat else None,
+        "strategies": strat, "benchmarks": benchmarks, "guide": guide, "research": research_block,
+        "versions": versions, **(_wf_metrics(walkforward_block(ml, feats, panel, market, best)) if with_walkforward else {}),
+        "best_strategy": simulate.HEADLINE_STRATEGY if any(x["name"] == simulate.HEADLINE_STRATEGY for x in strat) else None,
     }
+
+
+def research_artifacts(out: pd.DataFrame, panel: pd.DataFrame, test: pd.DataFrame, start: str, prod: str, thr: float,
+                       cfgs: dict, comparison: pd.DataFrame, versions: dict) -> dict:
+    """Evidence tables for the research items (composition, capacity, cost model, HW2/HW3 studies)."""
+    rs = S.research
+    comp = research.composition_study(out, panel, prod, thr)
+    artifacts.save_frame("composition.parquet", comp)
+    artifacts.save_frame("capacity_study.parquet", research.capacity_study(out, panel, prod))
+    # flat vs cap-aware costs on the production strategies (TEST, reported)
+    rows = []
+    for name in ("model_top5", "model_crash_only", "all_events_unconditional"):
+        if name not in cfgs:
+            continue
+        for cm in ("flat", "cap"):
+            eq, tr = simulate.exact_sim(test, panel, simulate.replace(cfgs[name], cost_model=cm), start=start)
+            if not eq.empty:
+                m = simulate.perf_metrics(eq, name)
+                rows.append({"strategy": name, "cost_model": cm, "cagr": m.get("cagr"), "sharpe": m.get("sharpe"),
+                             "max_drawdown": m.get("max_drawdown"), "n_trades": len(tr)})
+    artifacts.save_frame("cost_models.parquet", pd.DataFrame(rows))
+    sel = out[f"pred_book_{prod}_rule_{int(round(thr * 100))}"] == 1
+    artifacts.save_frame("holding_period.parquet", research.holding_period_study(out, sel))
+    uc_cols = [c for c in out.columns if c.startswith("pred") and "top1_daily" not in c]
+    te_known = out[(out["split"] == "test") & out[dataset.TARGET].notna()]
+    artifacts.save_frame("uniquely_correct.parquet", analysis.uniquely_correct_table(te_known, uc_cols))
+    winner = research.pick_variant(comparison) if len(comparison) else None
+    wd = None
+    if winner is not None:
+        wd = {k: (winner[k].item() if isinstance(winner[k], np.generic) else winner[k])
+              for k in ("variant", "learner", "val_auc", "val_prec_top10", "test_auc", "test_prec_top10") if k in winner}
+    return {"versions": versions, "feature_set": rs.feature_set, "model_layout": rs.model_layout,
+            "book_exclude_families": list(rs.book_exclude_families),
+            "book_exclude_categories": list(rs.book_exclude_categories),
+            "max_trades_per_day": rs.max_trades_per_day,
+            "cap_costs_bps": {"enabled": S.cap_costs.enabled, "large": S.cap_costs.large, "mid": S.cap_costs.mid,
+                              "small": S.cap_costs.small, "flat": S.costs.bps_one_way},
+            "comparison_winner_validation": wd,
+            "suggested_composition_validation": research.suggest_composition(comp)}
+
+
+def walkforward_block(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, market: pd.DataFrame, best: dict) -> dict:
+    """R2: yearly expanding refits, stitched out-of-sample predictions, exact simulation, honest track record."""
+    rs = S.research
+    kind = rs.wf_model
+    stitched, by_year = walkforward.run(ml, feats, kind, best.get(kind, {}), rs.model_layout)
+    if stitched.empty:
+        return {}
+    keep = ["date", "ticker", "event_family", "edgar_category", "cap_bucket", "sector", "proba_wf", "wf_thr", "wf_score",
+            "wf_year", dataset.TARGET, "growth_future_10d"]
+    artifacts.save_frame("walkforward.parquet", stitched[[c for c in keep if c in stitched]])
+    sim = walkforward.simulate_stitched(stitched, panel, market)
+    artifacts.save_frame("walkforward_equity.parquet", sim["equity"])
+    kn = stitched[stitched[dataset.TARGET].notna()]
+    sel = kn[kn["proba_wf"] >= kn["wf_thr"]]
+    return {"model": kind, "layout": rs.model_layout, "feature_set": rs.feature_set, "first_year": rs.wf_first_year,
+            "purge_days": rs.wf_purge_days, "n_oos_events": int(len(kn)),
+            "oos_precision_selected": float(sel[dataset.TARGET].mean()) if len(sel) else None,
+            "oos_base_rate": float(kn[dataset.TARGET].mean()),
+            "oos_auc": float(research.roc_auc_score(kn[dataset.TARGET].astype(int), kn["proba_wf"])),
+            "by_year": json.loads(by_year.to_json(orient="records")),
+            "strategies": sim["strategies"], "benchmarks": sim["benchmarks"]}
+
+
+def _wf_metrics(block: dict) -> dict:
+    """metrics.json: `walkforward` = flat dict of scalars (headline strategy wf_model_top5 + same-window SPY),
+    `walkforward_detail` = per-year table, all strategies and benchmarks."""
+    if not block:
+        return {"walkforward": {}}
+    by = {m["name"]: m for m in block["strategies"]}
+    head = by.get("wf_model_top5", {})
+    bm = {m["name"]: m for m in block["benchmarks"]}
+    flat = {"strategy": "wf_model_top5", "model": block["model"], "feature_set": block["feature_set"],
+            "first_year": block["first_year"], "purge_days": block["purge_days"], "n_oos_events": block["n_oos_events"],
+            "oos_auc": block["oos_auc"], "oos_precision_selected": block["oos_precision_selected"],
+            "oos_base_rate": block["oos_base_rate"], "start": head.get("start"), "end": head.get("end"),
+            **{k: head.get(k) for k in ("cagr", "sharpe", "max_drawdown", "total_return", "n_trades", "win_rate", "avg_trade_ret")},
+            "spy_cagr": bm.get("SPY_buy_hold", {}).get("cagr"), "spy_sharpe": bm.get("SPY_buy_hold", {}).get("sharpe"),
+            "spy_max_drawdown": bm.get("SPY_buy_hold", {}).get("max_drawdown")}
+    return {"walkforward": flat, "walkforward_detail": block}
 
 
 def guide_analysis(test: pd.DataFrame, ml: pd.DataFrame, panel: pd.DataFrame, start: str,
@@ -217,7 +340,7 @@ def guide_analysis(test: pd.DataFrame, ml: pd.DataFrame, panel: pd.DataFrame, st
     artifacts.save_frame("guide_sensitivity.parquet", pd.DataFrame(sens))
 
     # cost stress test (1x / 2x / 3x) for the guide arms and the best model strategy
-    best = max(strat, key=lambda x: x.get("cagr") or -9)["name"] if strat else None
+    best = simulate.HEADLINE_STRATEGY if simulate.HEADLINE_STRATEGY in cfgs else None   # fixed, not the TEST winner
     stress = []
     for name in [n for n in cfgs if n.startswith("guide_")] + ([best] if best else []):
         for mult in (1.0, 2.0, 3.0):
@@ -263,17 +386,24 @@ def publish_live(ml: pd.DataFrame, panel: pd.DataFrame, uni: pd.DataFrame, bundl
     prob = models.predict_with_bundle(bundle, recent)
     preds = artifacts.load_frame("predictions")
     lookup = signals.expected_return_lookup(preds.rename(columns={"prob": "p"}).assign(**{"growth_future_10d": preds.get("growth_future")}), "p") \
-        if not preds.empty else (lambda p: None)
+        if not preds.empty else (lambda p, c=None: None)
     sig = signals.build_signals(recent, prob, bundle["threshold"], bundle["name"], lookup)
     latest = sig[sig["date"] == data_through]
     artifacts.save_frame("events", sig)
     artifacts.save_frame("signals", latest)
     pr = panel[panel["date"] >= data_through - pd.Timedelta(days=380)][["ticker", "date", "open", "high", "low", "close", "volume"]]
     artifacts.save_frame("prices_recent", pr)
-    artifacts.save_frame("universe", uni[[c for c in ["ticker", "company", "sector", "sub_industry", "cap_bucket", "cik", "wikipedia_title", "index_name"] if c in uni]])
+    artifacts.save_frame("universe", uni[[c for c in ["ticker", "company", "sector", "sub_industry", "cap_bucket", "cik", "wikipedia_title", "index_name", "is_current_member"] if c in uni]])
     return {"data_through": data_through.date().isoformat(), "n_signals_today": len(latest),
             "n_actionable_today": int(latest["tier"].isin(["STRONG_BUY", "BUY"]).sum()),
             "n_events_90d": len(sig)}
+
+
+def _current(uni: pd.DataFrame) -> pd.DataFrame:
+    """Live constituents only (the universe also holds removed names for the point-in-time history)."""
+    if "is_current_member" in uni:
+        return uni[uni["is_current_member"].fillna(True).astype(bool)]
+    return uni
 
 
 def regime_block(ctx: pd.DataFrame) -> dict:
@@ -293,7 +423,7 @@ def regime_block(ctx: pd.DataFrame) -> dict:
 # --------------------------------------------------------------------------------------
 def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False) -> dict:
     t0 = time.time()
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     steps: dict = {}
     try:
         if mode == "update":
@@ -314,9 +444,10 @@ def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False
             steps["train"] = {"model": metrics["model"]["name"], "test_auc": metrics["model"]["test_auc"]}
         bundle = models.load_bundle()
         steps["publish"] = publish_live(ml, data["panel"], data["universe"], bundle)
-        metrics.update({"generated_at": datetime.now(timezone.utc).isoformat(),
+        metrics.update({"generated_at": datetime.now(UTC).isoformat(),
                         "data_through": steps["publish"]["data_through"],
-                        "universe_size": int(data["universe"]["ticker"].nunique()),
+                        "universe_size": int(_current(data["universe"])["ticker"].nunique()),
+                        "universe_size_incl_removed": int(data["universe"]["ticker"].nunique()),
                         "n_events": int(len(data["events"])), "n_panel_rows": int(len(data["panel"])),
                         "regime": regime_block(data["ctx"]), "mode": mode})
         artifacts.save_metrics(metrics)
@@ -324,12 +455,14 @@ def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False
         housekeeping.archive_signals(metrics["data_through"])
         steps["report"] = report.build()
         steps["housekeeping"] = housekeeping.run()
+        from . import notify  # R3: push signals if Telegram / webhook is configured (no-op otherwise)
+        steps["notify"] = notify.notify()
         status = "success"
         err = None
     except Exception as exc:  # recorded, then re-raised for callers / cron exit code
         status, err = "failed", f"{type(exc).__name__}: {exc}"
         log.exception("pipeline failed")
-    entry = {"started": started, "finished": datetime.now(timezone.utc).isoformat(), "mode": mode, "retrain": retrain,
+    entry = {"started": started, "finished": datetime.now(UTC).isoformat(), "mode": mode, "retrain": retrain,
              "status": status, "error": err, "seconds": round(time.time() - t0, 1), "steps": steps}
     artifacts.append_run_log(entry)
     if err:

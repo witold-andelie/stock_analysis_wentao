@@ -43,8 +43,8 @@ with st.sidebar:
                "artifacts via a synced data dir), or run `docker compose up -d` and open :8501.")
 
 st.title("Drift or Reversal? Signal monitor")
-t_over, t_sig, t_eq, t_tr, t_model, t_guide, t_runs = st.tabs(
-    ["Overview", "Latest signals", "Equity curves", "Trades", "Model", "Rolling-window guide", "Pipeline runs"])
+t_over, t_sig, t_eq, t_tr, t_model, t_res, t_guide, t_runs = st.tabs(
+    ["Overview", "Latest signals", "Equity curves", "Trades", "Model", "Research", "Rolling-window guide", "Pipeline runs"])
 
 with t_over:
     if not m:
@@ -111,6 +111,32 @@ with t_model:
     if not br.empty:
         dim = st.selectbox("Dimension", sorted(br["dimension"].unique()))
         st.dataframe(br[br["dimension"] == dim], use_container_width=True)
+
+with t_res:
+    wf_m = m.get("walkforward") or {}
+    wf_eq = _frame("walkforward_equity.parquet")
+    st.subheader("Walk-forward track record (yearly expanding refits, stitched out-of-sample)")
+    if wf_m:
+        st.json({k: v for k, v in wf_m.items() if not isinstance(v, (list, dict))}, expanded=False)
+    if not wf_eq.empty and {"date", "equity"} <= set(wf_eq.columns):
+        color = "strategy" if "strategy" in wf_eq else None
+        st.plotly_chart(px.line(wf_eq, x="date", y="equity", color=color, log_y=True), use_container_width=True)
+    elif not wf_m:
+        _empty("walk-forward results")
+    for title, name in (("Model variants (validation picks; test shown for reference)", "model_comparison.parquet"),
+                        ("Book composition rules (decided on validation)", "composition.parquet"),
+                        ("Holding-period study (HW2 Q3)", "holding_period.parquet"),
+                        ("Uniquely-correct predictions (HW3)", "uniquely_correct.parquet"),
+                        ("Capacity-aware thresholds (HW4)", "capacity_study.parquet"),
+                        ("Cost models: flat vs cap-aware", "cost_models.parquet"),
+                        ("Filing text event study (R4)", "filing_text_study.parquet"),
+                        ("Survivorship: current members vs point-in-time universe", "survivorship.parquet")):
+        df = _frame(name)
+        st.subheader(title)
+        if df.empty:
+            st.caption("not produced yet")
+        else:
+            st.dataframe(df.astype({c: str for c in df.columns if df[c].dtype == "object"}), use_container_width=True)
 
 with t_guide:
     g = m.get("guide") or {}

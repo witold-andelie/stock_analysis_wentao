@@ -235,10 +235,10 @@ for dim in ["event_family", "edgar_category", "cap_bucket", "year", "regime_stat
 write("04_rolling_window_pressure_release.ipynb", [
     md("""# 04 · Rolling-Window Pressure & Release (strategy guide, Variant B)
 
-Source: `Global_Rolling_Window_Trading_Strategy_Guide.docx` (v1.0, 15 Nov 2026). The guide's
-China A-share mechanism (10-day +100% / 30-day +200% cumulative-deviation thresholds) has **no US
-equivalent** — NYSE/Nasdaq LULD is a 5-minute band — so we implement the **global statistical
-variant** only and treat "release" purely as a feature. Arm D (regulatory events) is not applicable.
+Source: `Global_Rolling_Window_Trading_Strategy_Guide.docx` (v1.0, 15 Nov 2026). This project covers
+**US equities only**. US exchanges have no cumulative-deviation threshold rule (NYSE/Nasdaq LULD is a
+5-minute band), so we implement the guide's **statistical variant (Variant B)** and treat "release"
+purely as a feature. The guide's exchange-rule variant (Variant A, Arm D) is out of scope.
 
 Indicators (Section 3), benchmark B = SPY:
 
@@ -294,4 +294,51 @@ rather than rebranding ordinary momentum.* The verdict printed above is computed
 the README reports it with the numbers. The release features stay in the ML feature set either way,
 so the model can use (or ignore) them — their importance is visible in notebook 02.
 """),
+])
+
+# ------------------------------------------------------------------------------------
+write("05_research_improvements.ipynb", [
+    md("""# 05 · Research improvements: survivorship, which-not-when, walk-forward, homework borrowings
+
+This notebook reads the tables produced by the second development wave (OPM SD1/SD2/SD3 changes):
+
+| Topic | Table | Origin |
+|---|---|---|
+| Survivorship bias: current members vs point-in-time universe | `survivorship.parquet` | roadmap R1, HW1 Q1 change tables |
+| Model variants: pooled vs cross-sectional vs per-family vs ranking | `model_comparison.parquet` | README §8 diagnosis |
+| Book composition (exclude breakouts / `mgmt_change`?) | `composition.parquet` | README §8 diagnosis |
+| Walk-forward yearly refits, stitched OOS track record | `walkforward.parquet`, `walkforward_equity.parquet` | roadmap R2 |
+| Holding period by family | `holding_period.parquet` | HW2 Q3 |
+| Uniquely-correct predictions | `uniquely_correct.parquet` | HW3 Q3 |
+"""),
+    code(SETUP),
+    code("""metrics = artifacts.load_metrics()
+def show(name):
+    df = artifacts.load_frame(name)
+    print(f"{name}: {'missing' if df.empty else f'{len(df)} rows'}")
+    return df
+print(json.dumps({k: metrics.get(k) for k in ("versions", "walkforward")}, indent=1, default=str)[:2500])"""),
+    md("## 1 · Survivorship bias (R1)"),
+    code("""show("survivorship.parquet")"""),
+    md("## 2 · Which, not when: model variants (VALIDATION decides; TEST shown for reference)"),
+    code("""show("model_comparison.parquet")"""),
+    md("## 3 · Book composition"),
+    code("""show("composition.parquet")"""),
+    md("## 4 · Walk-forward track record (R2)"),
+    code("""wf = show("walkforward.parquet"); wfe = show("walkforward_equity.parquet")
+if not wfe.empty:
+    piv = wfe.pivot_table(index="date", columns="strategy", values="equity") if "strategy" in wfe else wfe.set_index("date")["equity"]
+    piv.plot(logy=True, figsize=(12, 5), title="Walk-forward equity (stitched out-of-sample)"); plt.show()
+wf"""),
+    md("## 5 · Holding period (HW2 Q3) and uniquely-correct predictions (HW3)"),
+    code("""display(show("holding_period.parquet")); show("uniquely_correct.parquet")"""),
+    md("## 5b · Capacity-aware threshold (HW4) and cap-aware costs"),
+    code("""display(show("capacity_study.parquet")); show("cost_models.parquet")"""),
+    md("## 5c · SEC filing text (R4): does the text separate panic from permanent damage?"),
+    code("""ft = show("filing_text_study.parquet"); ft"""),
+    md("## 5d · Walk-forward by year"),
+    code("""pd.DataFrame((metrics.get("walkforward_detail") or {}).get("by_year", []))"""),
+    md("## 6 · Final strategies vs benchmarks after the improvements"),
+    code("""pd.DataFrame(metrics.get("strategies", []) + metrics.get("benchmarks", []))[
+    ["name", "cagr", "sharpe", "max_drawdown", "n_trades", "win_rate"]].sort_values("sharpe", ascending=False).round(3)"""),
 ])

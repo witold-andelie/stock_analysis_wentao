@@ -8,7 +8,7 @@ digraph SD3 {
   events [shape=box, fillcolor="#e6e6e6", label="Event Dataset"];
   panel  [shape=box, fillcolor="#e6e6e6", label="Daily Panel"];
   market [shape=box, fillcolor="#cfe2ff", label="market (SPY, IWM)"];
-  costs  [shape=box, label="Cost Model\n(15 bps one-way; stress 2x, 3x)"];
+  costs  [shape=box, label="Cost Model\n(cap-aware one-way bps: large 8 / mid 15 / small 25;\nflat 15 bps option; stress 2x, 3x)"];
 
   ml [shape=plain, style="", label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#e6e6e6">
@@ -16,11 +16,17 @@ digraph SD3 {
       <TR><TD STYLE="rounded" BGCOLOR="white">train ≤ 2021</TD><TD STYLE="rounded" BGCOLOR="white">validation 2022-23</TD><TD STYLE="rounded" BGCOLOR="white">test 2024 →</TD><TD STYLE="rounded" BGCOLOR="white">live (no target)</TD></TR>
     </TABLE>>];
 
+  p_cs   [shape=ellipse, label="Engineering Cross-sectional Features\n(per-date percentile rank and demeaning of\nstock-level numerics; market-level set optional)"];
   p_prep [shape=ellipse, fillcolor="#e6e6e6", label="Preparing Feature Sets\n(dataset.prepare: bins, dummies,\ntemporal split)"];
   p_rules [shape=ellipse, label="Applying Hand Rules\n(HW1 PEAD+momentum, HW5 panic,\nall events, guide arms A/B/C)"];
   p_tune [shape=ellipse, label="Tuning\n(grid per family on TRAIN,\nscored by VALIDATION precision@top10%)"];
   p_fit  [shape=ellipse, label="Fitting Final Models\n(TRAIN+VALIDATION refit; tree, RF,\nXGB, LGBM, logreg, ensemble)"];
-  p_thr  [shape=ellipse, label="Choosing Thresholds\n(VALIDATION, ≥ 5% of events)"];
+  p_thr  [shape=ellipse, label="Choosing Thresholds\n(VALIDATION, ≥ 5% of events,\noptional cap on average trades per day)"];
+  p_cmp  [shape=ellipse, penwidth=2, label="Comparing Model Variants\n(pooled · cross-sectional · per-family ·\nLGBM lambdarank by date; VALIDATION picks)"];
+  p_book [shape=ellipse, penwidth=2, label="Composing the Book\n(exclude momentum_breakout and mgmt_change\nfrom the model book if VALIDATION says so;\nguide arms stay a separate sleeve)"];
+  p_wf   [shape=ellipse, penwidth=2, label="Walk-forward Retraining\n(yearly expanding refit, purged by the label horizon,\nthreshold from a rolling validation year,\nstitched out-of-sample exact simulation)"];
+  p_hw   [shape=ellipse, label="Studying Holding Periods and\nUniquely-correct Predictions\n(HW2 Q3, HW3 table; month_wom and DGS10/DGS5 rule)"];
+  p_ver  [shape=ellipse, label="Checking Library Version\n(sklearn 1.7.x guard, version logged)"];
   p_sel  [shape=ellipse, label="Selecting Production Model\n(best VALIDATION AUC)"];
   p_vec  [shape=ellipse, label="Vector Simulating\n(sim1 hold, sim2 SL/TP)"];
   p_ex   [shape=ellipse, penwidth=2, label="Exact Simulating\n(daily loop, reinvestment, max positions,\nfixed-% or guide ATR/R framework)"];
@@ -29,6 +35,10 @@ digraph SD3 {
   p_diag [shape=ellipse, label="Diagnosing\n(precision by family / cause / sector /\nsize / year / regime; false positives)"];
 
   tuning [shape=box, label="Tuning Table\n(tuning.parquet)"];
+  cmp    [shape=box, label="Model Comparison\n(model_comparison.parquet:\nvalidation AND test, labelled)"];
+  bookr  [shape=box, label="Book Rules\n(composition.parquet, decided on VALIDATION)"];
+  wftr   [shape=box, style="filled,bold", penwidth=2, label="Walk-forward Track Record\n(walkforward.parquet, walkforward_equity.parquet,\nmetrics.json walkforward)"];
+  hwt    [shape=box, label="Holding-period and Uniquely-correct Tables\n(holding_period.parquet, uniquely_correct.parquet)"];
   bundle [shape=box, style="filled,bold", penwidth=2, label="Model Bundle\n(model.joblib)"];
   preds  [shape=box, label="Predictions\n(proba_*, pred* columns)"];
   report [shape=box, style="filled,bold", penwidth=2, label="Backtest Report\n(metrics.json strategies, benchmarks,\nguide; trades; equity; breakdown;\nimportance; calibration)"];
@@ -38,7 +48,12 @@ digraph SD3 {
       <TR><TD STYLE="rounded" BGCOLOR="white">kept</TD><TD STYLE="rounded" BGCOLOR="white">discarded</TD></TR>
     </TABLE>>];
 
-  events -> p_prep; p_prep -> ml;
+  events -> p_prep; p_prep -> ml; p_cs -> ml [dir=both, label="cs_rank_*, cs_dm_*"]; ml -> p_cs [arrowhead=odot];
+  ml -> p_cmp [arrowhead=odot]; p_cmp -> cmp; cmp -> p_fit [arrowhead=odot, style=dashed, label="winning variant"];
+  preds -> p_book [arrowhead=odot]; p_book -> bookr; bookr -> p_ex [arrowhead=odot]; bookr -> p_vec [arrowhead=odot];
+  ml -> p_wf [arrowhead=odot]; panel -> p_wf [arrowhead=odot]; costs -> p_wf [arrowhead=odot]; p_wf -> wftr; wftr -> report [dir=both];
+  ml -> p_hw [arrowhead=odot]; preds -> p_hw [arrowhead=odot]; p_hw -> hwt; hwt -> report [dir=both];
+  p_ver -> report [style=dashed];
   ml -> p_rules [arrowhead=odot]; p_rules -> preds;
   ml -> p_tune [arrowhead=odot]; p_tune -> tuning;
   tuning -> p_fit [arrowhead=odot]; ml -> p_fit [arrowhead=odot]; p_fit -> preds;

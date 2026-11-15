@@ -3,8 +3,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/src DRIFTREV_DA
 WORKDIR /app
 # libgomp1: OpenMP runtime required by LightGBM/XGBoost (missing from the slim base image)
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-runtime.txt .
+RUN pip install --no-cache-dir -r requirements-runtime.txt
 COPY src ./src
 COPY dashboard ./dashboard
 COPY agent ./agent

@@ -4,9 +4,9 @@ Guide thesis: after an unusually strong benchmark-relative advance, a stock may 
 early gains age out of a rolling measurement window, the measured extreme falls mechanically
 even if the price does not. A renewed advance is tradable only if genuine demand confirms it.
 
-US adaptation (guide Section 2): NYSE/Nasdaq have no China-style cumulative-deviation rule
-(LULD is a 5-minute band), so "release" is used ONLY as a statistical feature and Arm D
-(regulatory events) does not apply.
+Scope: US equities only. US exchanges have no cumulative-deviation threshold rule (NYSE/Nasdaq
+LULD is a 5-minute band), so "release" is used ONLY as a statistical feature; the guide's
+exchange-rule variant (Variant A / Arm D) is out of scope for this project.
 
 Definitions (guide Section 3), P = stock close, B = benchmark close (SPY):
     D(t, L)      = 100 * (P_t / P_{t-L} - B_t / B_{t-L})              percentage points

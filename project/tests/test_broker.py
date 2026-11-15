@@ -32,3 +32,16 @@ def test_preview_offline(art_dir):
     assert p["dry_run"] and p["equity_source"] == "capital" and not p["broker_configured"]
     assert broker.preview_orders()["equity_used"] == 10_000
     assert broker.submit_orders(confirm=True)["submitted"] is False
+
+
+def test_expiry_uses_latest_signal_per_ticker():
+    from datetime import date
+
+    import pandas as pd
+
+    from driftrev.broker import expired_tickers
+    sig = pd.DataFrame({"ticker": ["AAA", "AAA", "BBB"],
+                        "exit_by_date": ["2026-11-01", "2026-11-30", "2026-11-05"]})
+    # AAA has a newer signal (exit 11-30): its old 11-01 expiry must not close the fresh position
+    assert expired_tickers(sig, date(2026, 11, 10)) == ["BBB"]
+    assert expired_tickers(pd.DataFrame(), date(2026, 11, 10)) == []

@@ -67,6 +67,13 @@ def get_model_info(top_n: int = 15, dimension: str | None = None) -> dict:
 
 
 @mcp.tool()
+def get_research(table: str | None = None, limit: int = 200) -> dict:
+    """Research tables (model comparison, walk-forward track record, holding periods, uniquely-correct,
+    guide arms, survivorship, ...). Omit `table` to list what exists plus headline verdicts."""
+    return _safe(service.research, table, limit)
+
+
+@mcp.tool()
 def get_regime() -> dict:
     """Market fragility regime state and triggers."""
     return _safe(service.regime)
@@ -119,6 +126,9 @@ def main() -> None:
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO)
     if args.transport == "stdio":
+        # MCP hosts show the server's stderr: keep it to warnings (audit F8)
+        logging.getLogger().setLevel(logging.WARNING)
+        logging.getLogger("mcp").setLevel(logging.WARNING)
         mcp.run("stdio")
         return
     import uvicorn

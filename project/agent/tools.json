@@ -25,8 +25,11 @@
           "event_family": {
             "type": "string",
             "enum": [
-              "earnings",
-              "shock"
+              "earnings_up",
+              "earnings_down",
+              "earnings_crash",
+              "shock_crash",
+              "momentum_breakout"
             ]
           },
           "limit": {
@@ -42,7 +45,7 @@
     "type": "function",
     "function": {
       "name": "get_recent_events",
-      "description": "List recent earnings/crash events with model probabilities.",
+      "description": "List recent events (earnings, crashes, momentum breakouts) with model probabilities and tiers.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -56,8 +59,11 @@
           "event_family": {
             "type": "string",
             "enum": [
-              "earnings",
-              "shock"
+              "earnings_up",
+              "earnings_down",
+              "earnings_crash",
+              "shock_crash",
+              "momentum_breakout"
             ]
           },
           "limit": {
@@ -151,6 +157,42 @@
           "dimension": {
             "type": "string",
             "description": "Filter breakdown by dimension"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_research",
+      "description": "Get research evidence: list tables and headline verdicts, or one table (model_comparison, walkforward, holding_period, uniquely_correct, guide_arms, survivorship, cost_stress, ...). Use it to justify or question a signal.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "table": {
+            "type": "string",
+            "enum": [
+              "model_comparison",
+              "composition",
+              "walkforward",
+              "holding_period",
+              "uniquely_correct",
+              "guide_arms",
+              "guide_sensitivity",
+              "cost_stress",
+              "survivorship",
+              "pred_eval",
+              "vector_sims",
+              "calibration",
+              "capacity_study",
+              "cost_models",
+              "filing_text_study"
+            ]
+          },
+          "limit": {
+            "type": "integer"
           }
         },
         "required": []

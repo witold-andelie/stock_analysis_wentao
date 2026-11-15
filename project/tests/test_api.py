@@ -2,7 +2,6 @@ import sys
 import time
 import types
 
-import pytest
 from fastapi.testclient import TestClient
 
 from driftrev import service

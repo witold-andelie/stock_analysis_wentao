@@ -1,325 +1,354 @@
 # Drift or Reversal? An event-driven ML trading system for the S&P 1500
 
 Final project for the [Stock Markets Analytics Zoomcamp 2026](https://github.com/DataTalksClub/stock-markets-analytics-zoomcamp).
+Scope: **US equities only**.
 
-> **One question, asked every evening for every S&P 1500 stock that just had an information shock:**
+> **The question, asked every evening for every S&P 1500 stock that just had an information shock:**
 > will the move **drift** (continue) or **revert** over the next 10 sessions, after costs?
 
-Three hypotheses I developed during the course are tested side by side on one dataset:
+Three hypotheses I developed during the course are tested side by side on one point-in-time dataset:
 
 | Event family | Origin | Hypothesis |
 |---|---|---|
-| `earnings_up` / `earnings_down` / `earnings_crash` | **HW1 capstone idea**: short-horizon momentum + post-earnings drift (PEAD) | Prices under-react to earnings news. The drift is stronger with trend support and a real EPS surprise (SUE). |
-| `shock_crash` | **HW5 Q3**: panic vs permanent damage | After a ≥10% one-day fall on ≥2× volume, the bounce depends on *what was filed* with the SEC, not on how the tape moved. |
+| `earnings_up` / `earnings_down` / `earnings_crash` | **HW1 capstone idea**: short-horizon momentum + post-earnings drift (PEAD) | Prices under-react to earnings news. The drift is stronger with trend support, a real EPS surprise (SUE / analyst consensus) and guidance language. |
+| `shock_crash` | **HW5 Q3**: panic vs permanent damage | After a ≥10% one-day fall on ≥2× volume, the bounce depends on *what was filed* with the SEC (8-K items and the text of the filing), not on how the tape moved. |
 | `momentum_breakout` | **Strategy guide** *Rolling-Window Pressure & Release* (Variant B) | A top-decile relative-strength stock that consolidates, then breaks out, continues. Old gains "aging out" of the rolling window may add fuel. |
 
-Everything runs end to end: data → features → models → simulations → daily signals → API and agent tools → CI/CD. It is designed **model-first** with an OPM architecture model ([`docs/architecture/opm/`](docs/architecture/opm/OPL.md)).
+The system runs end to end: data → features → models → simulations → daily signals → REST / MCP / tools for a
+24/7 agent → CI/CD on GitHub Actions. It is built **model-first** against an OPM architecture model
+([`docs/architecture/opm/`](docs/architecture/opm/OPL.md)), and its research numbers passed an independent
+leakage and accounting audit (§8).
 
 ---
 
 ## Contents
 1. [Problem and how the result is used](#1-problem-and-how-the-result-is-used)
-2. [Results at a glance](#2-results-at-a-glance)
+2. [Results at a glance: the honest version](#2-results-at-a-glance-the-honest-version)
 3. [Data sources](#3-data-sources)
-4. [Features](#4-features-200-model-inputs)
+4. [Features](#4-features-269-model-inputs)
 5. [Transformations and EDA](#5-transformations-and-eda)
 6. [Modeling](#6-modeling)
 7. [Trading simulation](#7-trading-simulation)
-8. [Deep analysis and what to improve](#8-deep-analysis-and-what-to-improve)
+8. [Deep analysis, audit and what to improve](#8-deep-analysis-audit-and-what-to-improve)
 9. [Automation, CI/CD and data retention](#9-automation-cicd-and-data-retention)
-10. [Agent interface, broker and dashboard](#10-agent-interface-for-a-247-bot-broker-and-dashboard)
+10. [Agent interface, notifications, broker and dashboard](#10-agent-interface-notifications-broker-and-dashboard)
 11. [How to reproduce](#11-how-to-reproduce)
 12. [Architecture (OPM) and repository layout](#12-architecture-opm-and-repository-layout)
-13. [Limitations](#13-limitations-read-before-trusting-any-number)
+13. [Limitations](#13-limitations)
 14. [Evaluation-criteria map](#14-evaluation-criteria-map)
 
 ---
 
 ## 1. Problem and how the result is used
 
-The course's base setup predicts 30-day growth for the largest stocks, every day. This project changes the
+The course's base setup predicts 30-day growth of the largest stocks every day. This project changes the
 **unit of decision**. A row is an **event** rather than a ticker-day: an earnings release dated to the
-minute from SEC EDGAR, a crash, or a momentum breakout. The prediction is made only when new information
-has arrived. Events cover **large, mid and small caps** (S&P 500/400/600) and three economically
-different mechanisms, so the analysis can ask *where* any edge lives.
+minute from SEC EDGAR, a crash, or a momentum breakout. Events cover **large, mid and small caps**
+(S&P 500/400/600), only while the stock was actually in the index (point-in-time membership), and span
+three economically different mechanisms, so the analysis can ask *where* any edge lives.
 
-**Target:** `is_positive_growth_10d = close[t+10] / open[t+1] ≥ 1.02`. Entry is at the next open, because the
-signal is only known at the close. The exit is the close 10 sessions later. The +2% hurdle covers the
-30 bps round-trip cost and leaves a profit.
+**Target:** `is_positive_growth_10d = close[t+10] / open[t+1] ≥ 1.02`. Entry is at the next open, because
+the signal is only known at the close. The exit is the close 10 sessions later. The +2% hurdle covers
+round-trip costs (8 / 15 / 25 bps per side for large / mid / small caps) and leaves a profit.
 
 **How it is used.** After each US close the system:
 1. pulls only the missing data;
 2. scores the session's events;
 3. publishes tiered signals (`STRONG_BUY / BUY / WATCH / SKIP / AVOID / NO_CALL`) with an expected net
-   return, a stop, a target and an exit date;
-4. serves them to a personal 24/7 agent (Grok bot or any MCP / OpenAPI client), a dashboard, a static
-   results site and an optional Alpaca paper-trading account.
+   return, stop, target and exit date;
+4. pushes them to Telegram or a webhook, serves them to a personal 24/7 agent (Grok bot or any MCP /
+   OpenAPI client), a dashboard and a GitHub Pages results site, and optionally sizes paper orders on Alpaca.
 
-## 2. Results at a glance
+## 2. Results at a glance: the honest version
 
-TEST period = **2024-01-02 → 2026-11-13**, strictly out of sample. Every hyper-parameter, threshold and
-production-model choice was made on VALIDATION (2022–23). Capital is $10,000 and costs are 15 bps per side.
+The project's most important result is **how much the first version overstated returns**, and why.
 
-| Strategy (exact simulation, reinvestment) | CAGR | Sharpe | Max DD | Trades | Win rate |
-|---|---:|---:|---:|---:|---:|
-| `model_crash_only`: model ≥ 0.47 on crash events, top 5 | **37.5%** | **1.58** | **−9.7%** | 54 | 70% |
-| `model_top5`: model ≥ 0.47, any family, max 5 positions | 35.2% | 1.28 | −14.9% | 92 | 59% |
-| `model_top5_risk_managed`: + stop 15% / TP 25%, prob-weighted size, regime pause | 19.5% | 1.39 | −10.9% | 100 | 59% |
-| `all_events_unconditional`: buy every event, first come, max 5 | 40.6% | 1.03 | −49.6% | 360 | 53% |
-| `model_pead_only` (HW1 idea, earnings only) | 9.2% | 0.67 | −16.6% | 52 | 63% |
-| `model_breakout_only` | 5.3% | 0.36 | −25.6% | 61 | 48% |
-| `guide_model_all_events_R`: guide risk template (0.5% risk/trade) | 2.6% | 0.78 | −3.2% | 93 | 53% |
-| **Benchmark: SPY buy & hold** | 19.1% | 1.19 | −18.8% | | |
-| Benchmark: IWM buy & hold | 13.4% | 0.71 | −27.5% | | |
-| Benchmark: HW1 momentum rule (top quintile, 10-day rebalance) | 23.0% | 1.05 | −24.1% | | |
+**Out-of-sample TEST, 2024-01-02 → 2026-11-13** (exact simulation, $10,000, reinvestment, cap-aware costs).
+Every hyper-parameter, threshold, feature set and book rule was chosen on VALIDATION (2022–23).
 
-**Reading this honestly:**
+| Strategy | First version: today's S&P 1500, no audit | **Final: point-in-time universe + audit fixes** | Sharpe (final) | Max DD (final) |
+|---|---:|---:|---:|---:|
+| Buy every event, no model (`all_events_unconditional`) | CAGR +40.6% | **−8.5%** | −0.08 | −57.9% |
+| `model_top5`: ensemble ≥ 0.52, ≤ 5 positions | +35.2% | **+8.4%** | 0.43 | −18.0% |
+| `model_crash_only`: same model, crash events only | +37.5% | **+16.4%** | 0.71 | −19.2% |
+| **SPY buy & hold** | +19.1% | **+19.1%** | 1.19 | −18.8% |
+| IWM buy & hold | +13.4% | +13.4% | 0.71 | −27.5% |
+| HW1 momentum rule (top quintile, point-in-time) | +23.0% | +17.0% | 0.86 | −23.7% |
 
-* **Precision gain:** the production model (RandomForest, test AUC **0.541**) lifts precision from a
-  **39.9% base rate to 49.2%** at its validation-chosen threshold. Calibration is monotonic: the bottom
-  probability decile hits 34.7%, the top decile 47.7%. The edge is **real but small**.
-* **Model vs benchmark:** `model_top5` and `model_crash_only` beat SPY on CAGR, Sharpe *and* drawdown.
-  However, ~50% of `model_top5` profit comes from 5 trades (bootstrap 95% CI of the mean trade return:
-  +1.4% … +8.9%).
-* **Survivorship bias:** even the dumb `all_events_unconditional` makes 40.6% CAGR. That is a red flag for
-  **survivorship bias**: the universe is *today's* S&P 1500, so companies that crashed and left the index
-  are missing. Treat every absolute return as an upper bound; the *relative* comparisons are what this
-  project can defend (see [Limitations](#13-limitations-read-before-trusting-any-number)).
-* **Strategy-guide causal test:** **discard the rolling-window release factor.** Arm C (with release)
-  beats Arm B on the 2024+ test sample (+1.58% vs +0.81% mean 10-day return, Sharpe 0.56 vs 0.30). Over
-  all years it is worse (+0.07% vs +0.23%), all bootstrap CIs include 0, and the sign flips across release
-  thresholds. The guide's own go/no-go rule (stable across periods and parameters) therefore rejects it.
-  Arm D (exchange-rule events) does not apply to US stocks.
+**Walk-forward 2018 → 2026** (yearly expanding refits, 16-day purge, threshold from the prior year;
+113,414 out-of-sample events):
 
-The daily results site (GitHub Pages, produced by CI) shows today's signals; see §9.
+| Strategy | CAGR | Sharpe | Max DD | Trades |
+|---|---:|---:|---:|---:|
+| `wf_model_top5` | 10.6% | 0.47 | −59.4% | 486 |
+| `wf_model_crash_only` | 11.0% | 0.50 | −56.8% | 293 |
+| `wf_all_events_unconditional` | 9.7% | 0.43 | −52.8% | 1,110 |
+| SPY buy & hold | 14.1% | 0.79 | −33.7% | |
+| HW1 momentum rule | 9.8% | 0.53 | −39.2% | |
+
+**What survives:**
+
+* **The model has real, but small, stock-picking skill.** Test AUC is 0.546 and walk-forward AUC 0.556.
+  Precision at the threshold is **50.5% against a 39.2% base rate**, and calibration is monotonic: the
+  bottom probability decile hits 33.3%, the top decile 46.4%. On the *same* events, buying everything
+  loses 8.5% a year on test, while the model's book makes +8.4%.
+* **It does not beat buy-and-hold SPY**, neither on the 2024+ test nor in the 2018–2026 walk-forward.
+  The bootstrap 95% CI of `model_top5`'s mean trade return is −1.8% … +4.4%, which includes zero.
+* **The impressive first-version numbers were mostly survivorship bias.** The universe was *today's*
+  S&P 1500, so a stock that crashed and later dropped out of the index was missing, and a stock that later
+  *joined* the index was included before it qualified. With the point-in-time universe (R1) and the
+  audit fixes, buy-everything falls from +40.6% to −8.5% CAGR on test. The table in §5 quantifies it.
+* **Where the edge is:** crash events (HW5 Q3) and `earnings_down`, larger caps, and stressed or elevated
+  regimes. There is no edge on `earnings_up`, and almost none on breakouts (§8).
+* **Strategy-guide causal test:** the rolling-window *release* factor is **discarded**. Arm C beats Arm B on
+  Sharpe and on the all-years and test means, but the sign flips across release thresholds, which fails
+  the guide's stability rule.
+
+The daily results site (GitHub Pages, produced by CI) shows the latest signals; see §9.
 
 ## 3. Data sources
 
-| Source | What | Use | New vs lectures | Rows (2014-01 → 2026-11) |
-|---|---|---|---|---:|
-| **Yahoo Finance** (`yfinance`) | daily OHLCV + dividends + splits for 1,502 stocks; SPY, IWM, MDY, ^VIX, ^VIX3M, 11 sector ETFs | prices, targets, technicals, benchmarks | lecture source | 4,426,339 + 50,226 |
-| **FRED** (fredgraph CSV) | DGS10, DGS2, DFF, BAA10Y, T10Y2Y | rates, curve, credit-spread regime flag | lecture source | 15,136 |
-| **SEC EDGAR** submissions API | every filing: form, **8-K item codes**, acceptance time (UTC → ET) | minute-accurate earnings dates; crash-cause taxonomy; offering, late-filing, 13D and Form 4 activity | **new** | **1,896,174** |
-| **SEC EDGAR** XBRL `companyconcept` | diluted EPS facts (first-reported) | point-in-time SUE | **new** | 334,462 |
-| **Wikimedia** pageviews API | daily views of each company's Wikipedia article | abnormal public attention | **new** | **4,522,878** |
-| **Wikipedia** S&P 500/400/600 lists | constituents, GICS sector, article title | universe, sector, size bucket | **new** (scraped) | 1,502 |
+| Source | What | Use | New vs lectures |
+|---|---|---|---|
+| **Yahoo Finance** (`yfinance`) | daily OHLCV + dividends + splits for 1,678 stocks (1,502 current + 176 recovered former members); SPY, IWM, MDY, ^VIX, ^VIX3M, 11 sector ETFs | prices, targets, technicals, benchmarks | lecture source |
+| **Yahoo Finance** earnings dates | analyst EPS estimate, reported EPS, surprise % (HW1 Q4) | consensus surprise for earnings events | new use |
+| **FRED** (fredgraph CSV) | DGS10, DGS5, DGS2, DFF, BAA10Y, T10Y2Y | rates, curve, credit-spread regime flag, HW3 macro rule | lecture source |
+| **SEC EDGAR** submissions API | every filing: form, **8-K item codes**, acceptance time (UTC → ET) | minute-accurate earnings dates; crash-cause taxonomy; offering, late-filing, 13D and Form 4 activity | **new** |
+| **SEC EDGAR** XBRL `companyconcept` | diluted EPS facts (first-reported) | point-in-time SUE | **new** |
+| **SEC EDGAR** filing documents | EX-99.1 press releases / primary documents of 8-K, 424B, NT 10-K/Q filings around events | **R4 text layer**: guidance cut/raise, going concern, offering priced, investigations, clinical failures… + Loughran–McDonald tone | **new** |
+| **Wikimedia** pageviews API | daily views of each company's Wikipedia article | abnormal public attention | **new** |
+| **Wikipedia** S&P 500/400/600 lists + *historical components* | constituents, GICS sector, article title, **add/remove history** (HW1 Q1) | point-in-time universe (R1), size bucket | **new** (scraped) |
 
-**≈ 11.2 million raw records.** The derived daily panel has 4,425,338 ticker-days, and the event dataset
-has 176,802 rows × 202 model inputs. No data is committed to git (see §9 for where it lives).
+Sizes (2014-01 → 2026-11): 4,837,123 price rows, 2,021,569 SEC filings, 4,544,238 pageview rows,
+370,038 XBRL EPS facts, 25,302 consensus EPS records, 26,091 classified filing texts and 2,982 membership
+intervals. That is **11.9 million raw records**. The derived daily panel has 4,835,791 ticker-days, and the event dataset
+has 149,055 rows × 269 model inputs. No data is committed to git (§9).
 
-## 4. Features (202 model inputs)
+## 4. Features (269 model inputs)
 
 All features at row *t* use information available by the close of *t*. The only exception is filings
-accepted before 09:00 ET on *t+1*, since the trade enters at that open. FRED and pageviews are lagged one
-row. `tests/test_core.py::test_features_have_no_look_ahead` enforces this.
+accepted before 09:00 ET on *t+1*, since the trade enters at that open. FRED and pageviews are lagged one row.
+`tests/test_audit_leakage.py::test_build_all_has_no_look_ahead` replaces all data after a cut date with
+random numbers and asserts that no earlier feature changes.
 
-**Event reaction (new):** `abn_ret_1d` (beta-adjusted), `ret_vs_sector` (vs the sector SPDR), `gap_open`,
-`range_pct`, `close_loc`, `ret_open_close`, `volume_mult` (vs the prior 20 sessions), `volume_z`
-(log-volume z-score).
-
-**Momentum, from the HW1 idea:** `growth_{3,5,10,20,60,120,252}d` (total return), `mom_12_1`,
-`close_sma{20,50,200}`, `sma50_sma200`, `rs_vs_spy_60d`, `dist_52w_high/low`, `up/down_streak_prior`, and
-**`momentum_blend`** = the HW1 score (price vs the 20/50/200-day MAs + 12-1 momentum).
-
-**Technicals** (TA-Lib formulas reimplemented in pandas so Docker needs no C library): RSI-14, MACD
-histogram, Bollinger %b, Stochastic %K, CCI-20, MFI-14, ADX-14, OBV slope, ATR %.
-
-**Risk and liquidity:** `vol_20d`, `vol_60d`, `vol_ratio_20_60`, `beta_252`, `idio_vol_60`, `log_dollar_vol`.
-
-**Earnings history (new):** `prev_ear` (previous earnings-day abnormal return), `prev_pead_20d` (previous
-quarter's realised drift), `beats_last4`, `days_since_prev_event`, `n_crash_prior_252`.
-
-**SEC EDGAR (new source):**
-- `sue` (seasonal random-walk standardized unexpected earnings from *first-reported* diluted EPS, with
-  Q4 = FY − Q1..Q3), `eps_yoy_pos`, `sue_age_days`;
-- 14 **8-K item flags** in the event window (1.01 agreement, 1.02 termination, 1.03 bankruptcy,
-  2.01 acquisition, 2.02 results, 2.05 restructuring, 2.06 impairment, 3.01 delisting notice,
-  3.02 unregistered equity, 4.01 auditor change, 4.02 non-reliance/restatement, 5.02 officer change,
-  7.01 Reg FD, 8.01 other);
-- form flags (offering 424B/S-1/S-3, NT 10-K/Q late filing, periodic report) and prior-activity counts
-  (`n_offering_365d`, `n_8k_90d`, `n_form4_30d` insider filings, `n_13d_180d` activist stakes,
-  `n_late_filing_365d`);
-- **`edgar_category`**, a priority taxonomy (most damaging cause wins): bankruptcy_delisting >
-  restatement_auditor > offering > earnings > impairment_restructuring > mgmt_change > deal >
-  regfd_other_8k > none.
-
-**Attention (new source):** `att_ratio_7_90` (log views over 7 days vs the prior 90), `att_spike_1d`,
-`att_level`.
-
-**Rolling-window state (strategy guide):**
-- `rw_dev_{10,20}` = D(t,L) = 100·(P_t/P_{t−L} − B_t/B_{t−L});
-- `rw_max_dev_{10,20}` = M(t,W) = max over L ≤ W, plus `rw_best_lag_*` and `rw_proximity_*`;
-- `rw_release_{10,20}_{1,3,5}` = flat-path release M(t,W) − max(0, M(t,W−j)). This is a closed form: price
-  and benchmark are frozen at *t*, so no future data enters;
-- `rw_prior_strength` (cross-sectional percentile of D(t,20) among liquid names, maximum over the last
-  10 sessions), `rw_days_since_high`, `rw_pullback_atr`, `rw_range_compression`, `rw_breakout_5d`,
-  `rw_volume_mult_med`, and arm flags `arm_a/b/c`.
-
-**Market and regime (fragility monitor idea from my TradePulse project):** SPY/IWM returns, drawdown,
-above-200-day flag, small-vs-large spread, VIX level/change, **VIX/VIX3M term structure**, average
-pairwise correlation of the 11 sector ETFs, the FRED series, `breadth_above_200`, `crash_breadth`
-(share of the universe crashing today), and `regime_points` → `regime_state`.
-
-**Dummies (7 categoricals + 7 engineered bins):** `event_family`, `edgar_category`, `sector`, `cap_bucket`,
-`month`, `weekday`, `regime_state`, plus binned `bin_reaction`, `bin_rsi`, `bin_sue`, `bin_52w`, `bin_vix`,
-`bin_attention`, `bin_momentum`.
+* **Event reaction:** `abn_ret_1d` (beta-adjusted), `ret_vs_sector`, `gap_open`, `range_pct`, `close_loc`,
+  `ret_open_close`, `volume_mult`, `volume_z`.
+* **Momentum (HW1):** `growth_{3,5,10,20,60,120,252}d`, `mom_12_1`, `close_sma{20,50,200}`, `sma50_sma200`,
+  `rs_vs_spy_60d`, `dist_52w_high/low`, streaks, and **`momentum_blend`** (the HW1 score).
+* **Technicals** (TA-Lib formulas in pandas): RSI-14, MACD histogram, Bollinger %b, Stochastic %K, CCI-20,
+  MFI-14, ADX-14, OBV slope, ATR %.
+* **Risk and liquidity:** `vol_20d`, `vol_60d`, `vol_ratio_20_60`, `beta_252`, `idio_vol_60`, `log_dollar_vol`.
+* **Earnings history:** `prev_ear`, `prev_pead_20d` (used only once fully realised), `beats_last4`,
+  `days_since_prev_event`, `n_crash_prior_252`.
+* **Analyst consensus (HW1 Q4):** `eps_surprise_pct`, `eps_beat`, `eps_est_available`,
+  `eps_release_age_sessions`. A release counts only if stamped by the event day's 16:00 ET close; 91% of
+  earnings events are covered.
+* **SEC EDGAR items:**
+  - SUE from first-reported diluted EPS;
+  - 14 **8-K item flags** in the event window (1.01 agreement … 2.02 results, 2.06 impairment,
+    3.01 delisting notice, 4.02 restatement, 5.02 officer change, 7.01, 8.01);
+  - form flags (offering, late filing, periodic report) and prior-activity counts (offerings 365d,
+    8-Ks 90d, Form 4 insider filings 30d, 13D stakes 180d, late filings 365d);
+  - **`edgar_category`**, a priority taxonomy in which the most damaging cause wins.
+* **SEC filing text (R4):**
+  - 16 lexicon flags `ft_guidance_cut / raise / reaffirm`, `ft_going_concern`, `ft_offering_priced`,
+    `ft_restatement`, `ft_material_weakness`, `ft_investigation`, `ft_clinical_failure`,
+    `ft_exec_departure`, `ft_covenant`, `ft_impairment`, `ft_layoffs`, `ft_bankruptcy`, `ft_beat`, `ft_miss`;
+  - Loughran–McDonald negative / positive / uncertainty / net tone, and the offering discount when stated;
+  - **`edgar_category_text`**, which splits `earnings` into guidance cut / raise / mixed / other, and marks
+    going-concern, clinical-failure, offering-priced and investigation events.
+* **Attention:** `att_ratio_7_90`, `att_spike_1d`, `att_level`.
+* **Rolling-window state (strategy guide):** `rw_dev_*` = D(t,L), `rw_max_dev_*` = M(t,W), flat-path
+  `rw_release_{10,20}_{1,3,5}` = M(t,W) − max(0, M(t,W−j)), prior strength, consolidation and breakout
+  state, arm flags.
+* **Market and regime** (fragility monitor from my TradePulse project, plus the HW1 Q3 correction state):
+  SPY/IWM returns and drawdown, VIX and **VIX/VIX3M**, sector-ETF correlation, FRED series, breadth,
+  crash breadth, `in_correction` / `correction_depth` / `days_in_correction`, and regime points and state.
+* **Which, not when:** `cs_rank_*` / `cs_dm_*` are per-date percentile ranks and date-demeaned copies of
+  32 stock-level features. The production feature set **drops the market-level inputs** (§6).
+* **Dummies** (8 categoricals + 7 engineered bins): `event_family`, `edgar_category`,
+  `edgar_category_text`, `sector`, `cap_bucket` (point-in-time), `month`, `weekday`, `regime_state`, and the
+  binned reaction, RSI, SUE, 52-week, VIX, attention and momentum.
 
 ## 5. Transformations and EDA
 
 `features.build_all` builds **one unified event table** from all sources (notebook `01`). `dataset.prepare`
 defines the course feature sets (`TO_PREDICT`, `NUMERIC`, `CATEGORICAL` → `DUMMIES`, `TO_DROP`) and the
-temporal split: train ≤ 2021 (99,735 events), validation 2022–23 (30,236), test 2024 → (46,831).
+**purged** temporal split: train ≤ 2021 (79,544), validation 2022–23 (25,616), test 2024 → (43,015).
+880 rows whose 10-day label crosses a split boundary are purged.
 
-Point-in-time engineering that matters:
-- **Earnings dating:** an 8-K Item 2.02 accepted after 16:00 ET belongs to the *next* session. Yahoo
-  earnings calendars are not point-in-time, so EDGAR acceptance times are the ground truth.
-  (`acceptanceDateTime` is genuine UTC: Apple's 16:30 ET releases appear as 20:30Z in summer and 21:30Z
-  in winter.)
-- **SUE:** uses the first-reported value of each quarter, so later restatements cannot leak.
-- **Total return:** built from stored dividends instead of Yahoo's *Adj Close*, which rewrites history on
-  every dividend and would silently corrupt incremental loads.
+**Survivorship bias, quantified** (R1, `survivorship.parquet`, notebook `05`). These are all events with a
+known target.
 
-**Key EDA findings** (all years, 2014–2026, notebook `01`):
-
-| Family | Events | Base rate (≥ +2% in 10 days) | Mean 10-day return | Mean vs SPY, +10d / +20d |
+| Universe | Events | Base rate | Mean 10d | `shock_crash` mean 10d |
 |---|---:|---:|---:|---:|
-| `shock_crash` | 3,256 | **46.2%** | +1.68% | **+1.41% / +1.58%**: reversal |
-| `earnings_crash` | 3,771 | 41.9% | +0.70% | +0.14% / +0.32% |
-| `earnings_up` | 36,015 | 38.5% | +0.58% | −0.03% / +0.03% |
-| `earnings_down` | 29,862 | 37.8% | +0.57% | −0.04% / −0.01% |
-| `momentum_breakout` | 102,818 | 36.8% | +0.26% | −0.07% / −0.12% |
+| Today's constituents, any date (first version) | 173,705 | 37.6% | +0.42% | **+1.68%** |
+| **Point-in-time: in the index on the event date** | 147,973 | 37.2% | +0.31% | **+1.06%** |
+| ↳ names that later left the index | 9,927 | 36.5% | **−0.28%** | +0.10% |
+| Today's names *before* they joined (now excluded) | 35,659 | 39.0% | +0.65% | **+2.68%** |
 
-* **Reversal is real after non-earnings crashes; unconditional PEAD is not** (in this universe and period).
-  Earnings events drift ≈ 0 vs SPY on average. This is why the HW1 hand rule is weak and the
-  conditioning has to come from the model.
-* **The EDGAR cause matters (HW5 Q3, stage 1).** Crashes accompanied by an **offering** have a *negative*
-  mean 10-day return (−1.0%), while crashes with no filing bounce +1.6%. Dilution behaves like
-  "permanent damage", as hypothesised.
-* **Breakouts slightly lag SPY** at every horizon, which already hints at the four-arm verdict.
+Most of the first version's crash bounce came from stocks that were *about to be added* to an index. That is
+a look-ahead in the universe itself.
 
-EDA (notebook `01`) covers:
-- target distribution per family;
-- an event study of the abnormal return vs SPY at +5/+10/+20 days per family;
-- crash base rates by EDGAR cause (HW5 Q3, stage 1);
-- PEAD by SUE quintile and by momentum quintile (HW1);
-- hit rate by attention spike and by regime;
-- correlations of numeric features and dummies with the target.
+**Event study by family** (point-in-time, all years):
+
+| Family | Events | Base rate | Mean 10d | Mean vs SPY |
+|---|---:|---:|---:|---:|
+| `shock_crash` | 2,849 | **44.7%** | +1.06% | **+0.82%**: reversal |
+| `earnings_crash` | 3,743 | 41.4% | +0.38% | −0.17% |
+| `earnings_up` | 31,670 | 38.2% | +0.48% | −0.13% |
+| `earnings_down` | 26,823 | 37.6% | +0.51% | −0.12% |
+| `momentum_breakout` | 82,888 | 36.1% | +0.16% | −0.17% |
+
+* **Reversal after non-earnings crashes is real; unconditional PEAD is not** in this universe and period.
+* **What the SEC text says** (R4, `filing_text_study.parquet`, crash events, all years):
+  - Crashes with an **offering filing** mean −3.0% over 10 days (95% CI −5.7% … −0.5%, n=96, hit rate 31%):
+    permanent damage, as HW5 Q3 predicted.
+  - Crashes whose press release contains **guidance-cut language** mean **+2.8%** (+1.95% vs SPY,
+    CI +1.1% … +4.4%, n=171): the market over-reacts to guidance cuts.
+  - For post-earnings drift (2022+), guidance cut vs raise makes no reliable difference.
+* Notebook `01` also covers the target distribution, the event study at +5/+10/+20 days, crash base rates
+  by EDGAR cause, PEAD by SUE and momentum quintile, attention and regime, and feature and dummy correlations.
 
 ## 6. Modeling
 
-* **Hand rules first:**
-  - `pred0_manual_pead_momentum` (HW1);
-  - `pred1_manual_panic_no_damage` (crash + RSI < 35 + no damaging filing, HW5);
-  - `pred2_manual_all_events`;
-  - the guide arms A/B/C.
-* **Lecture models:** DecisionTree (depth 3–10) and RandomForest (300 trees, depth × leaf grid).
-* **New models:** XGBoost, LightGBM, LogisticRegression (scaled), and an **RF + XGB + LGBM probability
-  ensemble**.
-* **Tuning:** each grid point is fit on TRAIN and scored on VALIDATION by precision in the top decile
-  (what the strategy trades), with AUC as tie-breaker. Results are in `data/artifacts/tuning.parquet` and
-  notebook `02`.
+* **Hand rules:**
+  - HW1 PEAD + momentum;
+  - HW5 panic-no-damage;
+  - HW3 macro rule `DGS10 ≤ 4.5 & DGS5 ≤ 4`;
+  - buy all events;
+  - guide arms A/B/C.
+* **Lecture models:** DecisionTree and RandomForest. **New models:** XGBoost, LightGBM, LogisticRegression,
+  an RF + XGB + LGBM ensemble, and LightGBM LambdaRank.
+* **Tuning:** each grid is fit on TRAIN and scored on VALIDATION by precision in the top decile, with AUC
+  as tie-breaker (`tuning.parquet`).
+* **Which, not when** (`model_comparison.parquet`, VALIDATION decides):
+  - The first model's top features were market-level (rates, credit spread, VIX term structure), so it was
+    timing the market. Variants tested: pooled; pooled + HW3 week-of-month dummies; cross-sectional
+    features keeping or **dropping** market inputs; per-family models; LambdaRank by date.
+  - Dropping the market inputs gives the most stable result: validation AUC 0.555 and test AUC 0.545 for
+    RF/LGBM, against 0.547 / 0.532 for pooled.
+  - The pooled + week-of-month RF scores marginally higher on validation (0.558) but generalises worse
+    (test 0.535).
+  - Per-family models and LambdaRank did not help.
+* **Production model:** the ensemble on `cs_drop_market` (best validation AUC 0.557; test AUC 0.546).
 * **Decision rules:**
-  - each model's threshold is the highest-precision cut-off on VALIDATION that still trades ≥ 5% of
-    events (`pred*_best_rule_NN`);
-  - custom rule `pred9_ensemble_top1_daily` takes only the single most confident event per day;
-  - the strategies add max-concurrent-position rules.
+  - the threshold is the highest-precision cut on VALIDATION subject to **≤ 5 trades per active day**
+    (HW4 capacity rule), giving **0.52**;
+  - `pred9_ensemble_top1_daily` takes one event per day;
+  - book composition, decided on VALIDATION, excludes `momentum_breakout` and EDGAR `offering` events
+    (`composition.parquet`).
 
-TEST results (precision, base rate 39.9%):
-
-| Prediction | Trades | Precision | Avg 10-day growth |
+| Prediction (TEST, base rate 39.2%) | Trades | Precision | Avg 10-day growth |
 |---|---:|---:|---:|
-| `pred4_logreg_best_rule_71` | 53 | **56.6%** | +6.6% |
-| `pred9_ensemble_top1_daily` | 423 | 50.8% | +3.2% |
-| `pred5_rf_best_rule_47` (production) | 992 | 49.2% | +2.1% |
-| `pred8_ensemble_best_rule_47` | 7,204 | 46.0% | +1.8% |
-| `pred1_manual_panic_no_damage` (HW5 rule) | 1,587 | 43.4% | +1.2% |
-| `pred2_manual_all_events` | 45,751 | 39.9% | +0.7% |
-| `pred0_manual_pead_momentum` (HW1 rule) | 3,815 | 38.9% | +0.3% |
+| `pred4_logreg_best_rule_69` | 26 | 73.1% | +8.1% |
+| `pred3_lgbm_best_rule_55` | 160 | 54.4% | +3.3% |
+| `pred5_rf_best_rule_51` | 132 | 53.0% | +3.3% |
+| `pred_book_ensemble_rule_52` (production book) | 158 | 51.3% | +2.5% |
+| `pred8_ensemble_best_rule_52` | 190 | 50.5% | +2.4% |
+| `pred_manual_dgs10_dgs5` (HW3 rule) | 19,496 | 42.1% | +1.3% |
+| `pred1_manual_panic_no_damage` (HW5 rule) | 1,587 | 42.0% | +0.6% |
+| `pred2_manual_all_events` | 41,933 | 39.2% | +0.5% |
+| `pred0_manual_pead_momentum` (HW1 rule) | 3,466 | 38.4% | +0.2% |
 
-| Model | Validation AUC | Test AUC |
-|---|---:|---:|
-| RandomForest (production: best validation AUC among rf/xgb/lgbm/ensemble) | 0.548 | **0.541** |
-| Ensemble | 0.516 | 0.539 |
-| LightGBM | 0.509 | 0.537 |
-| XGBoost | 0.509 | 0.535 |
-| LogisticRegression | 0.550 | 0.531 |
-| DecisionTree | 0.509 | 0.519 |
+Library versions are logged in `metrics.json`. A `check_sklearn_version()` guard (HW4 lesson) warns on
+scikit-learn ≠ 1.7.x.
 
 ## 7. Trading simulation
 
-* **Vector simulations** (`simulate.vector_sim`) use the course's `sim1_` convention: $100 per positive
-  prediction, fees, capital = $100 × 10 days × Q75(daily bets). `sim2_` adds a stop-loss and take-profit
-  from each event's intraperiod MAE/MFE. They run for every `pred*` column. The best is
-  `pred9_ensemble_top1_daily` with an approximate CAGR of 33.1% (sim1).
-* **Exact simulations** (`simulate.exact_sim`) are a day-by-day loop with a cash account and
-  **reinvestment of gains**:
-  - **entry and exit:** entry at the next open, stop / target / time exits on the real daily OHLC path
-    (a gap through the stop fills at the open);
-  - **position limits:** max concurrent positions, skipping tickers already held;
-  - **sizing:** probability-weighted sizes, and the **regime pause** (no new entries when the fragility
-    monitor is *stressed*);
-  - **long-short:** a long-short book that shorts events with prob ≤ 0.30;
-  - **guide risk template:** stop at 2×ATR, target at 3R, 8-session time stop, 0.5% of equity risked per
-    trade, ≤ 10% notional per name, ≤ 2% total open risk, skip gap-ups above +3%, and no new entries after
-    3 stop-outs in a day.
-* **13 strategies vs 3 benchmarks:** SPY, IWM and the HW1 momentum rule (§2). Metrics are CAGR, Sharpe,
-  Sortino, max drawdown, Calmar, rolling 1-year returns, win rate and average trade.
-* **Report card** (strategy guide §9.3) for every strategy: fill rate, profit factor, average R, top-5
-  profit share, beta vs SPY, bootstrap 95% CI of the mean trade return, turnover.
-* **Cost stress:** results at 2× and 3× costs.
-* **Four-arm causal test:** with a parameter-sensitivity grid (notebook `04`).
+* **Vector simulations** follow the course's `sim1_` ($100 per positive prediction, capital = $100 × 10 ×
+  Q75 of daily bets) and `sim2_` (stop-loss / take-profit from each event's MAE/MFE) for every `pred*`.
+* **Exact simulations** (`simulate.exact_sim`) are a daily loop with a cash account and **reinvestment**:
+  - entry at the next open; stops, targets and time exits on real OHLC paths (a gap through the stop fills
+    at the open);
+  - max concurrent positions; probability-weighted sizing; **regime pause**; a long-short book;
+  - **cap-aware costs**;
+  - the **guide's R framework**: stop at 2×ATR, 3R target, 8-session time stop, 0.5% risk per trade,
+    ≤ 10% notional, ≤ 2% open risk, gap-up skip, and no new entries after 3 stop-outs in a day.
+* **13 strategies vs 3 benchmarks** (SPY, IWM and the point-in-time HW1 momentum rule), with CAGR, Sharpe,
+  Sortino (downside deviation), max drawdown, Calmar, rolling 1-year returns, win rate and average trade.
+* **Report card** per strategy: fill rate, profit factor, average R, top-5 profit share, beta vs SPY,
+  bootstrap CI and turnover.
+* **Cost stress:** `model_top5` makes 8.4% CAGR at 1× costs, 5.5% at 2× and 2.7% at 3×.
+* **Walk-forward** (R2): yearly expanding refits 2018–2026 with stitched out-of-sample equity (§2,
+  `walkforward.parquet`).
+* **Pre-declared headline:** the strategy shown on the results site is fixed in advance as `model_top5`.
+  It is not picked as the best on TEST.
 
-## 8. Deep analysis and what to improve
+## 8. Deep analysis, audit and what to improve
 
-Notebook `03`, `precision_breakdown.parquet` and `false_positives.parquet` (TEST, production rule):
+**Where the model works** (TEST, production rule, `precision_breakdown.parquet`):
 
 | Slice | Base rate | Precision of selected | Lift |
 |---|---:|---:|---:|
-| `earnings_down` / `earnings_up` | 39.8% / 40.0% | 58.7% / 58.4% | **+18.8 / +18.4 pp** |
-| `shock_crash` | 47.3% | 62.5% | +15.2 pp |
-| `momentum_breakout` | 39.5% | 36.3% | **−3.2 pp** |
-| large / mid / small caps | 40.5 / 39.7 / 39.6% | 54.3 / 51.6 / 45.2% | +13.7 / +11.9 / +5.7 pp |
-| 2024 / 2025 | 39.7 / 39.4% | 34.2 / 58.8% | −5.5 / +19.4 pp |
-| EDGAR `mgmt_change` | 41.4% | 8.3% (12 trades) | −33 pp |
+| `earnings_down` | 39.2% | 65.6% (n=32) | **+26.4 pp** |
+| `shock_crash` | 44.5% | 55.4% (n=56) | +10.8 pp |
+| `momentum_breakout` | 38.6% | 48.3% (n=29) | +9.6 pp |
+| `earnings_up` | 39.9% | 37.8% (n=45) | −2.1 pp |
+| large / mid / small caps | 38.8 / 39.0 / 39.8% | 57.5 / 51.0 / 47.5% | +18.7 / +12.0 / +7.7 pp |
+| 2024 / 2025 / 2026 | 38.5 / 38.7 / 40.5% | 33.3 / 58.1 / 48.1% | −5.2 / +19.5 / +7.5 pp |
+| regime normal / elevated / stressed | 38.3 / 48.9 / 55.3% | 42.6 / 71.4 / 78.6% | +4.2 / +22.5 / +23.3 pp |
 
-What the diagnostics say:
-1. **The model learns *when* more than *which*.** The top RF importances are market-level (DGS10, the
-   credit spread, VIX term structure, sector correlation, breadth), and precision swings from 34% (2024)
-   to 59% (2025). *Next step:* demean features cross-sectionally by date, or add a per-date ranking
-   objective (LightGBM `lambdarank`), so the model must pick stocks rather than time the market.
-2. **Breakouts dilute the book.** The model has negative lift on `momentum_breakout`, and the guide's
-   Arm C fails its stability test. *Next step:* drop breakouts from the model book (or train per-family
-   models) and keep the guide arms as a separate rule-based sleeve.
-3. **Panic vs damage works where the thesis says.** Crash events have the highest base rate (47%) and the
-   model adds +15 pp. Events tagged `mgmt_change` almost never bounce, which is a candidate exclusion rule
-   in the spirit of HW5 Q3.
-4. **Small caps carry the least edge** and the highest costs. *Next step:* a cap-aware cost model
-   (higher bps for small caps) and a minimum dollar-volume tier for live trading.
-5. **Concentration:** about half the profit of `model_top5` comes from 5 trades. The fill rate is only
-   8.5% (capacity-bound), so a ranking-quality improvement matters more than the threshold.
+**Independent correctness audit.** A separate reviewer ran the audit; every fix comes with a failing test
+first (`tests/test_audit_*.py`).
+* **Verified correct:**
+  - no look-ahead in the feature build (randomised-future test);
+  - cross-sectional features use same-date rows only;
+  - walk-forward never fits on the year it predicts;
+  - thresholds, models, feature set and book rules are chosen on VALIDATION only;
+  - simulator accounting is correct: next-open entry, gap fills, cash never negative, two-sided costs;
+  - API auth is fail-closed with a constant-time compare, and orders need two switches.
+* **Fixed:**
+  1. purge between splits (labels crossed into validation);
+  2. `cap_bucket` was today's index, so 16.9% of events had the wrong size bucket and cost; it is now
+     point-in-time;
+  3. the HW1 benchmark could hold not-yet-members;
+  4. the headline strategy was chosen on TEST;
+  5. the Sortino definition.
+* Also fixed after the audit:
+  - NaN in `metrics.json` broke `/v1/backtest/summary` (HTTP 500);
+  - broker brackets are GTC instead of DAY, so stops survive the close;
+  - duplicate same-day orders are blocked;
+  - expiry uses the latest signal per ticker;
+  - the public `/health` no longer echoes error text.
+
+**Debugging insights and ideas:**
+1. **The model is partly a volatility selector.** Its top feature is the ATR-based stop distance, followed by
+   SUE age and distance from the 52-week high. The +2% target favours volatile names. *Next:* a
+   volatility-only baseline, and a volatility-normalised target (e.g. return / ATR).
+2. **2024 was a bad year** (precision 33%) and 2025 a good one (58%). Regime dependence is large. *Next:*
+   a regime-conditional threshold or position size, decided on validation.
+3. **Earnings-up events carry no edge**, while earnings-down and crash events do, which supports the
+   reversal side of the thesis. *Next:* drop `earnings_up` from the book (validate first).
+4. **Text helps classify crashes** (offering means damage, guidance cut means panic) but cannot be learned
+   for earnings before 2022 (no text). *Next:* extend the text fetch to 2014–2021 earnings.
+5. **Concentration and capacity:** with ~0.4% of events selected, results rest on a few hundred trades. A
+   ranking-quality gain matters more than a threshold tweak.
 
 ## 9. Automation, CI/CD and data retention
 
 ```bash
-python -m driftrev.pipeline --mode update                 # daily: incremental download → signals → report
-python -m driftrev.pipeline --mode update --retrain       # + refit models and all backtests
+python -m driftrev.pipeline --mode update                 # daily: incremental download → signals → report → notify
+python -m driftrev.pipeline --mode update --retrain       # + refit models and all backtests + walk-forward
 python -m driftrev.pipeline --mode update --retrain --tune   # + grid search
 python -m driftrev.pipeline --mode file --retrain         # reproduce from the snapshot, no downloads
 python -m driftrev.pipeline snapshot                      # export data/driftrev_snapshot.zip
 python -m driftrev.housekeeping [--dry-run]               # delete expired data files
+python -m driftrev.filing_text ingest --max-seconds 1800  # continue the resumable SEC text fetch
 ```
 
-* **Two regimes.** `update` downloads from the APIs. `file` reads the parquet snapshot (`events`,
-  `panel`, `market`, `universe`, `ctx`) from `data/snapshot/`, or fetches it once from
-  `DRIFTREV_SNAPSHOT_URL`. CI publishes that zip weekly as the GitHub Release asset `data-snapshot`.
+* **Two regimes.** `update` downloads from the APIs. `file` reads the parquet snapshot (`events`, `panel`,
+  `market`, `universe`, `ctx`) from `data/snapshot/`, or fetches it from `DRIFTREV_SNAPSHOT_URL`. CI
+  publishes it weekly as the Release asset `data-snapshot`.
 * **Incremental loading into DuckDB** (`data/warehouse.duckdb`, git-ignored):
-  - each loader asks for its last stored date and downloads only the gap (prices: 7-day overlap, and a
-    split triggers a full re-download of that ticker);
-  - FRED re-pulls the last 60 days because values get revised;
-  - EDGAR re-reads only the `recent` block for known companies;
-  - pageviews are fetched from each article's last date.
-* **Cron:** `scripts/run_daily.sh` + `scripts/crontab.example` (22:30 New York, Mon–Fri), or the
-  `scheduler` container. Every run is recorded in `run_log.jsonl`.
+  - every loader fetches only the gap (prices: 7-day overlap; a split triggers a full re-download);
+  - FRED re-pulls the last 60 days;
+  - EDGAR re-reads only the recent block per company;
+  - pageviews and consensus EPS are fetched from each series' last date;
+  - SEC filing text resumes with a per-run time budget;
+  - membership is refreshed weekly.
+* **Cron:** `scripts/run_daily.sh` + `scripts/crontab.example` (22:30 New York, Mon–Fri), or the `scheduler`
+  container. Every run is recorded in `run_log.jsonl`.
 * **One notebook runs the whole workflow:** `notebooks/00_end_to_end_workflow.ipynb` calls the `.py`
   functions in order (download → transform → predict → simulate → latest new trades → agent view).
 
@@ -327,47 +356,53 @@ python -m driftrev.housekeeping [--dry-run]               # delete expired data 
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `.github/workflows/ci.yml` | push / PR on `project/**` | pytest (API, core invariants, retention, CI contract), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
-| `.github/workflows/daily.yml` | 22:30 ET Mon–Fri; Sunday retrain; manual | restore the warehouse from the Actions cache → `pipeline --mode update` → job summary, **GitHub Pages results site** (`index.html`, `signals.json`, `metrics.json`), run artifact (expires after 30 days), save cache; Sunday: release the snapshot asset |
-| `.github/workflows/cleanup.yml` | weekly; manual (dry-run option) | `scripts/gh_cleanup.sh`: delete Actions caches > 3 days (keep the newest), artifacts > 30 days, workflow runs > 30 days, old snapshot assets |
+| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (102 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
+| `daily.yml` | 22:30 ET Mon–Fri; Sunday retrain; manual | restore the warehouse from the Actions cache → `pipeline --mode update` → job summary, **GitHub Pages results site** (`index.html` with an SVG equity chart, `signals.json`, `metrics.json`), run artifact (30-day expiry), save cache, optional Telegram/webhook push; Sunday: snapshot Release asset |
+| `image.yml` | push on `project/**`; manual | build and push `ghcr.io/<owner>/driftrev` (`latest`, `sha-*`), then pull and check `/health` |
+| `cleanup.yml` | weekly; manual (dry-run) | delete Actions caches > 3 days (keeping the newest), artifacts and workflow runs > 30 days, and old snapshot assets |
 
-**Data retention** (`config.Retention`, run after every pipeline run):
+**Data retention** (`config.Retention`, after every pipeline run):
 - EDGAR root JSONs older than 2 days and history pages older than 180 days are deleted;
-- the daily signal archive is kept for 60 days;
+- **raw filing text** is deleted after 30 days (its flags and tone stay in the warehouse);
+- the signal archive is kept for 60 days;
 - only the newest snapshot zip is kept;
-- the run log is capped at 1,000 lines and logs at 5 MB;
-- the warehouse is checkpointed afterwards.
+- the run log is capped at 1,000 lines and logs at 5 MB.
 
-`tests/test_cicd.py` fails if the workflow retention numbers drift from `config.py`.
+`tests/test_cicd.py` keeps the workflow retention numbers in sync with `config.py`.
 
 **One-time GitHub setup:** Settings → Pages → Source = *GitHub Actions*. Add the repository secret
-`SEC_USER_AGENT` = `"Your Name your@email"` (the SEC requires a contact). The first scheduled run with an
-empty cache bootstraps the full history (about 1 hour).
+`SEC_USER_AGENT` = `"Your Name your@email"`; `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` /
+`DRIFTREV_WEBHOOK_URL` are optional. The first run with an empty cache bootstraps the full history
+(1–2 hours).
 
-## 10. Agent interface for a 24/7 bot, broker and dashboard
+## 10. Agent interface, notifications, broker and dashboard
 
 * **REST API** (`driftrev.api`, FastAPI, bearer token, OpenAPI with clean operation IDs):
   - `/health`;
   - `/v1/signals/latest`, `/v1/events/recent`, `/v1/tickers/{t}`;
-  - `/v1/backtest/{summary,trades,equity}`, `/v1/model`, `/v1/regime`, `/v1/runs`;
+  - `/v1/backtest/{summary,trades,equity}`, `/v1/model`, `/v1/regime`;
+  - `/v1/research?table=…` (model comparison, walk-forward, survivorship, filing-text study, holding
+    period, uniquely-correct, guide arms…), `/v1/runs`;
   - `POST /v1/pipeline/run` → `/v1/jobs/{id}`;
   - `POST /v1/orders/preview`, `GET /v1/portfolio`;
   - `/v1/agent/tools`.
-* **Function calling:** `agent/tools.json` uses the OpenAI/xAI format, so a Grok bot can load it directly.
-  `agent/grok_agent_example.py` is a working tool loop against `https://api.x.ai/v1`.
-* **MCP server:** `python -m driftrev.mcp_server --transport stdio|streamable-http` exposes the same tools.
-* See [`agent/README.md`](agent/README.md) for how to expose it safely (token, Tailscale or Cloudflare
-  Tunnel) and for a daily-brief prompt.
+* **Function calling:** `agent/tools.json` (14 tools, OpenAI/xAI format) can be loaded directly by a Grok
+  bot. `agent/grok_agent_example.py` is a working tool loop. The **MCP server**
+  (`python -m driftrev.mcp_server --transport stdio|streamable-http`) exposes the same tools. See
+  [`agent/README.md`](agent/README.md).
+* **Notifications (R3):** after each run, `driftrev.notify` pushes the day's BUY/STRONG_BUY signals with
+  stop, target and exit date to Telegram and/or a JSON webhook. It does nothing when not configured.
 * **Broker (Alpaca, paper by default):**
-  - `broker.preview_orders` sizes bracket orders from the signal book;
-  - `submit_orders` refuses unless `confirm=true` **and** `DRIFTREV_ALLOW_ORDERS=true`, and it is not
-    exposed as an agent tool;
-  - `close_expired_positions` exits after `exit_by_date`.
-* **Dashboard** (`streamlit run dashboard/app.py`): overview KPIs vs SPY, latest signals, equity curves,
-  trades explorer, model importance and breakdowns, rolling-window guide report card, pipeline runs.
-  The GitHub Pages site is the always-on read-only version.
+  - `preview_orders` sizes GTC bracket orders;
+  - `submit_orders` refuses unless `confirm=true` **and** `DRIFTREV_ALLOW_ORDERS=true`, skips held tickers
+    and open orders, and is not an agent tool;
+  - `close_expired_positions` exits after the latest signal's `exit_by_date`.
+* **Dashboard** (`streamlit run dashboard/app.py`): overview vs SPY, signals, equity curves, trades, model,
+  **research** (walk-forward, model variants, composition, capacity, costs, holding period, filing text,
+  survivorship), the rolling-window guide, and pipeline runs. It is rendered headlessly in the tests.
 * **Containers:** `docker compose up -d` starts `api` (:8000), `mcp` (:8001), `dashboard` (:8501) and
-  `scheduler` on a shared `/data` volume.
+  `scheduler` on a shared `/data` volume. Deployment templates for Cloud Run, Fly.io and Render are in
+  [`deploy/`](deploy/README.md); they are not deployed.
 
 ## 11. How to reproduce
 
@@ -375,92 +410,104 @@ empty cache bootstraps the full history (about 1 hour).
 git clone https://github.com/witold-andelie/stock_analysis_wentao.git
 cd stock_analysis_wentao/project
 python3.11 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt                 # pinned: scikit-learn 1.7.2, numpy 1.26.4, pyarrow 18.1 …
-cp .env.example .env                            # set SEC_USER_AGENT="Your Name your@email"
+pip install -r requirements.txt -r requirements-dev.txt     # pinned: scikit-learn 1.7.2, numpy 1.26.4 …; dev = ruff
+cp .env.example .env                                        # set SEC_USER_AGENT="Your Name your@email"
 export PYTHONPATH=src
 
-# quick smoke run on 50 tickers (~3 min)
+# quick smoke run on 50 tickers (~2–3 min)
 DRIFTREV_MAX_TICKERS=50 python -m driftrev.pipeline --mode update --retrain --tune
 
-# full S&P 1500 history: ~20 min download + ~6 min transform + ~25 min tuning/backtests on 8 cores
+# full history: ~30 min download + ~10 min transform + ~25 min tuning/backtests on 8 cores
 python -m driftrev.pipeline --mode update --retrain --tune
 
 # or without any download, from the CI snapshot:
 DRIFTREV_SNAPSHOT_URL=https://github.com/witold-andelie/stock_analysis_wentao/releases/download/data-snapshot/driftrev_snapshot.zip \
   python -m driftrev.pipeline --mode file --retrain
 
-python -m pytest tests -q                       # 27 tests
-jupyter notebook notebooks/                     # 00 … 04, executed with outputs
+python -m pytest tests -q && ruff check .                   # 102 tests, lint
+jupyter notebook notebooks/                                 # 00 … 05, executed with outputs
+
+# Docker: api :8000, mcp :8001, dashboard :8501, scheduler. Set DRIFTREV_API_TOKEN in .env first.
+docker compose up -d --build
+curl localhost:8000/health        # "no_data" until the pipeline has run once inside the volume:
+docker compose exec scheduler python -m driftrev.pipeline --mode update --retrain
+docker compose down
 ```
+
+A peer-review style reproducibility audit (fresh clone, every step timed) is in
+[`docs/REPRODUCIBILITY_AUDIT.md`](docs/REPRODUCIBILITY_AUDIT.md).
 
 ## 12. Architecture (OPM) and repository layout
 
-Development is **model-first** ([`AGENTS.md`](AGENTS.md)): every feature is first added to the OPM model
+Development is **model-first** ([`AGENTS.md`](AGENTS.md)). Every feature is first added to the OPM model
 (ISO 19450, Graphviz DOT + the OPL text twin), then implemented together with a test.
 
 | Diagram | Scope |
 |---|---|
 | [`SD0_system`](docs/architecture/opm/svg/SD0_system.svg) | system function *Signalling Event Trades*, environment, top-level processes |
-| [`SD1_acquiring`](docs/architecture/opm/svg/SD1_acquiring.svg) | incremental loading of the 5 sources into 8 warehouse tables |
-| [`SD2_transforming`](docs/architecture/opm/svg/SD2_transforming.svg) | features, event detection and specialisation, EDGAR taxonomy, SUE, attention, regime |
-| [`SD3_researching`](docs/architecture/opm/svg/SD3_researching.svg) | split, tuning, final fit, thresholds, simulations, benchmarks, four-arm test |
-| [`SD4_signalling`](docs/architecture/opm/svg/SD4_signalling.svg) | scoring, net edge, tiering with regime downgrade, sizing and exits, publishing |
-| [`SD5_serving_trading`](docs/architecture/opm/svg/SD5_serving_trading.svg) | REST / tools.json / MCP, auth, jobs, dashboard, order guard |
-| [`SD6_roadmap`](docs/architecture/opm/svg/SD6_roadmap.svg) | planned R1–R7 |
-| [`SD7_cicd`](docs/architecture/opm/svg/SD7_cicd.svg) | CI, daily CD, Pages, snapshot release, housekeeping, GitHub garbage collection |
+| [`SD1_acquiring`](docs/architecture/opm/svg/SD1_acquiring.svg) | incremental loading incl. historical membership and consensus EPS |
+| [`SD2_transforming`](docs/architecture/opm/svg/SD2_transforming.svg) | features, point-in-time universe, event detection, EDGAR taxonomy, SUE, attention, regime |
+| [`SD2.1_classifying_filing_text`](docs/architecture/opm/svg/SD2.1_classifying_filing_text.svg) | R4: exhibit selection, lexicon flags, LM tone, refined category |
+| [`SD3_researching`](docs/architecture/opm/svg/SD3_researching.svg) | purged split, model variants, book composition, tuning, thresholds, simulations, walk-forward, guide arms |
+| [`SD4_signalling`](docs/architecture/opm/svg/SD4_signalling.svg) | scoring, cap-aware net edge, tiering with regime downgrade, sizing and exits, publishing |
+| [`SD5_serving_trading`](docs/architecture/opm/svg/SD5_serving_trading.svg) | REST / tools.json / MCP, auth, research tables, jobs, notifications, dashboard, order guard |
+| [`SD6_roadmap`](docs/architecture/opm/svg/SD6_roadmap.svg) | R1–R5 implemented; R6 (intraday entry) planned |
+| [`SD7_cicd`](docs/architecture/opm/svg/SD7_cicd.svg) | CI, daily CD, Pages, GHCR image, snapshot release, housekeeping, GitHub garbage collection |
 
 ```
 project/
-  src/driftrev/   config · store · universe · prices · macro · edgar · attention        (ingestion)
-                  indicators · rolling_window · features · dataset                      (transformation)
-                  models · simulate · analysis                                          (research)
-                  signals · pipeline · artifacts · report · housekeeping                (signalling + ops)
-                  api · service · security · mcp_server · agent_tools · broker · scheduler (serving / execution)
-  notebooks/      00 end-to-end · 01 data & EDA · 02 modeling · 03 simulation & analysis · 04 rolling-window guide
-  dashboard/      Streamlit monitor            agent/   tools.json, routes.json, Grok example, agent README
-  docs/architecture/opm/   *.dot, OPL.md, svg/  scripts/ build_notebooks, render_opm, gh_cleanup, run_daily
-  tests/          27 tests                      Dockerfile · docker-compose.yml · requirements.txt · .env.example
-../.github/workflows/   ci.yml · daily.yml · cleanup.yml
+  src/driftrev/   config · store · universe · membership · prices · macro · edgar · attention · consensus · filing_text   (ingestion)
+                  indicators · rolling_window · features · dataset · research                                          (transformation)
+                  models · walkforward · simulate · analysis                                                           (research)
+                  signals · pipeline · artifacts · report · housekeeping · notify                                      (signalling + ops)
+                  api · service · security · mcp_server · agent_tools · broker · scheduler                             (serving / execution)
+  notebooks/      00 end-to-end · 01 data & EDA · 02 modeling · 03 simulation & analysis · 04 rolling-window guide · 05 research improvements
+  dashboard/  agent/  deploy/  docs/architecture/opm/  docs/REPRODUCIBILITY_AUDIT.md  scripts/  tests/ (102)
+  Dockerfile · docker-compose.yml · requirements{,-runtime,-dev}.txt · ruff.toml · .env.example
+../.github/workflows/   ci.yml · daily.yml · image.yml · cleanup.yml
 ```
 
-## 13. Limitations (read before trusting any number)
+## 13. Limitations
 
-* **Survivorship bias (largest).** The universe is the *current* S&P 1500. Delisted or demoted crash
-  victims are missing, which inflates crash-reversal and unconditional returns. Roadmap R1 adds the
-  historical add/remove tables.
-* **Small edge, concentrated P&L.** Test AUC is 0.54, and about half the best strategy's profit comes from
-  5 trades. One market regime (2025) carries most of the result.
-* **Costs.** A flat 15 bps per side is optimistic for small caps right after a crash. The cost-stress
-  table shows the strategies at 2× and 3×.
-* **Execution model.** Daily bars only: stops are checked against the low (gap fills at the open), and
-  there is no partial-fill or short-borrow model.
-* **Pageviews:** 6 of 1,247 articles were rate-limited during the first ingest and are filled
-  incrementally later.
-* **Disclaimer:** research and education only, not investment advice. Orders are paper-only and disabled
-  by default.
+* **Survivorship is reduced, not removed.**
+  - 176 of 737 names that left the indices after 2014 were recovered; 66% are gone from Yahoo.
+  - S&P 600 history starts in 2019-12, so earlier small-cap membership is assumed.
+  - Renamed tickers are dropped.
+* **Selection on validation.** Hyper-parameters, feature set, book rules and the capacity cap were all
+  chosen on 2022–23. Walk-forward years 2018–2023 are therefore not fully hyper-parameter-out-of-sample;
+  only 2024 onward is clean.
+* **Filing text for earnings** starts in 2022. Train sees no earnings text (`ft_text_available` flags this),
+  which is a distribution shift, not a leak.
+* **Sector** is today's GICS classification, which is a mild leak.
+* **Live vs backtest timing:** training windows include filings accepted before 09:00 ET on t+1. A live run
+  at 22:30 ET on t may not have them yet.
+* **Execution:** daily bars only, with no partial fills or borrow costs. Strategy P&L is price-only, while
+  the SPY benchmark includes dividends (conservative for the strategy).
+* **Small samples:** about 100–150 trades per test strategy, and bootstrap CIs of the mean trade include zero.
+* Research and education only, not investment advice. Orders are paper-only and disabled by default.
 
 ## 14. Evaluation-criteria map
 
 | Criterion | Where |
 |---|---|
-| Problem description, context, new problem definition, step-by-step findings | §1, §2, §5–§8; notebooks 01–04 |
-| Lecture data + 20+ new features with descriptions | §3, §4 (YF/FRED + ~150 new features) |
-| New data source (not YF/FRED) | SEC EDGAR filings + XBRL, Wikimedia pageviews, Wikipedia constituents |
-| Dataset > 1M records | 11.2M raw records; 4.43M-row daily panel |
-| Combined dataframe, feature sets, ≥ 5 new transformations, EDA | `features.build_all`, `dataset.py`, notebook 01 |
-| Lecture models, several models, custom decision rules, tuning, new models | §6, `models.py`, notebook 02 |
+| Problem description, context, new problem definition, step-by-step findings | §1, §2, §5–§8; notebooks 01–05 |
+| Lecture data + 20+ new features with descriptions | §3, §4 (YF/FRED + ~250 new features) |
+| New data source (not YF/FRED) | SEC EDGAR filings, XBRL and filing text; Wikimedia pageviews; Wikipedia constituents and history |
+| Dataset > 1M records | 11.9M raw records; 4.84M-row daily panel |
+| Combined dataframe, feature sets, ≥ 5 new transformations, EDA | `features.build_all`, `dataset.py`, notebook 01, §5 |
+| Lecture models, several models, custom decision rules, tuning, new models | §6, `models.py`, `research.py`, notebook 02 |
 | Vector sims, ≥ 2 strategies, exact sims with reinvestment | §7, `simulate.py`, notebook 03 |
-| Profitability vs benchmark (CAGR, Sharpe, DD, rolling returns) | §2, notebook 03 |
-| Advanced risk management, new strategies (max positions, regime, long-short, guide R) | §7 |
-| Exceptional profitability vs SPY | `model_top5`, `model_crash_only` (with the survivorship caveat, §13) |
-| Deep analysis by family / size / year / regime / cause, debug wrong predictions, ideas | §8, notebook 03 |
+| Profitability vs benchmark (CAGR, Sharpe, DD, rolling returns) | §2, notebook 03; walk-forward in notebook 05 |
+| Advanced risk management, new strategies | §7 (regime pause, R framework, max positions, long-short, capacity rule) |
+| Exceptional profitability vs SPY | **not claimed**: after removing survivorship bias the strategies do not beat SPY (§2) |
+| Deep analysis by family / size / year / regime / cause, debug wrong predictions, ideas | §8, notebooks 03 and 05 |
 | Notebooks exported to scripts + one end-to-end notebook | `src/driftrev/*`, notebook 00 |
-| Dependencies managed | `requirements.txt`, `.venv`, Dockerfile |
+| Dependencies managed | `requirements*.txt`, `.venv`, Dockerfile |
 | Cron re-run for the latest data | `run_daily.sh`, `crontab.example`, scheduler container, `daily.yml` |
 | Two regimes (file vs download) | `--mode file` / `--mode update` |
 | Incremental loading with storage outside GitHub | DuckDB warehouse, Actions cache, Release snapshot |
-| Bonus: code design | OPM model + module boundaries + 27 tests + CI |
-| Bonus: broker API | `broker.py` (Alpaca paper, bracket orders, order guard) |
-| Bonus: monitoring | Streamlit dashboard, GitHub Pages results site, REST/MCP agent interface |
-| Bonus: containerization | Dockerfile + docker-compose (4 services) |
-| Bonus: cloud deployment | GitHub Actions daily CD + GitHub Pages |
+| Bonus: code design | OPM model, module boundaries, 102 tests, ruff, CI, independent audit |
+| Bonus: broker API | `broker.py` (Alpaca paper, GTC brackets, order guard) |
+| Bonus: monitoring | dashboard, GitHub Pages site, Telegram/webhook notifications, REST/MCP agent interface |
+| Bonus: containerization | Dockerfile + docker-compose (4 services), GHCR image |
+| Bonus: cloud deployment | GitHub Actions daily CD + Pages; Cloud Run / Fly / Render templates |

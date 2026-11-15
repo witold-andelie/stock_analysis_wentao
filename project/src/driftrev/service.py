@@ -11,7 +11,7 @@ import logging
 import os
 import threading
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -49,7 +49,8 @@ def _filter_common(df: pd.DataFrame, ticker: str | None = None, event_family: st
     if ticker and "ticker" in df:
         df = df[df["ticker"].str.upper() == ticker.upper()]
     if event_family and "event_family" in df:
-        df = df[df["event_family"].str.lower() == event_family.lower()]
+        # prefix match: "earnings" selects earnings_up / earnings_down / earnings_crash
+        df = df[df["event_family"].str.lower().str.startswith(event_family.lower())]
     return df
 
 
@@ -69,7 +70,9 @@ def health() -> dict[str, Any]:
         "data_through": metrics.get("data_through"),
         "generated_at": metrics.get("generated_at"),
         "artifacts_present": present,
-        "last_run": last,
+        # /health is public: expose only the outcome and timing, not error text or step details
+        # (the full run log stays behind the bearer token at /v1/runs)
+        "last_run": {k: (last or {}).get(k) for k in ("started", "finished", "mode", "status", "seconds")} if last else None,
         "last_run_status": (last or {}).get("status"),
         "message": None if present["metrics"] else NO_DATA_MSG,
     }
@@ -226,6 +229,45 @@ def model_info(top_n: int = 15, dimension: str | None = None) -> dict[str, Any]:
     }
 
 
+RESEARCH_TABLES = {  # name -> artifact file (written by pipeline.train_and_backtest / transform)
+    "model_comparison": "model_comparison.parquet",
+    "composition": "composition.parquet",
+    "walkforward": "walkforward.parquet",
+    "holding_period": "holding_period.parquet",
+    "uniquely_correct": "uniquely_correct.parquet",
+    "guide_arms": "guide_arms.parquet",
+    "guide_sensitivity": "guide_sensitivity.parquet",
+    "cost_stress": "cost_stress.parquet",
+    "survivorship": "survivorship.parquet",
+    "pred_eval": "pred_eval.parquet",
+    "vector_sims": "vector_sims.parquet",
+    "calibration": "calibration.parquet",
+    "capacity_study": "capacity_study.parquet",
+    "cost_models": "cost_models.parquet",
+    "filing_text_study": "filing_text_study.parquet",
+}
+
+
+def research(table: str | None = None, limit: int = 200) -> dict[str, Any]:
+    """Research tables for an agent: without `table`, list what exists plus the headline blocks
+    (walk-forward, guide verdict); with `table`, return its rows."""
+    m = artifacts.load_metrics()
+    available = {k: artifacts.path(v).exists() for k, v in RESEARCH_TABLES.items()}
+    if table is None:
+        return {"available_tables": [k for k, ok in available.items() if ok],
+                "walkforward": m.get("walkforward"), "guide": m.get("guide"),
+                "versions": m.get("versions"), "message": None if m else NO_DATA_MSG}
+    if table not in RESEARCH_TABLES:
+        raise ServiceError(400, f"unknown table {table!r}; choose one of {sorted(RESEARCH_TABLES)}")
+    df = artifacts.load_frame(RESEARCH_TABLES[table])
+    if df.empty:
+        return {"table": table, "count": 0, "rows": [], "message": f"{table} not produced yet; run the pipeline with --retrain"}
+    for c in df.columns:  # interval / object columns -> str so JSON stays valid
+        if df[c].dtype == "object" or str(df[c].dtype).startswith("interval"):
+            df[c] = df[c].astype(str)
+    return {"table": table, "count": len(df), "rows": artifacts.to_records(df.head(_check_limit(limit, 5000)))}
+
+
 def regime() -> dict[str, Any]:
     m = artifacts.load_metrics()
     return {"data_through": m.get("data_through"), "regime": m.get("regime", {}),
@@ -238,7 +280,7 @@ _LOCK = threading.Lock()
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _run_job(job_id: str, mode: str, retrain: bool) -> None:

@@ -39,15 +39,17 @@ def test_retention_deletes_only_expired(data_dir):
     new_day = config.HISTORY_DIR / time.strftime("%Y-%m-%d")
     _touch(old_day / "signals_latest.parquet", 90)
     _touch(new_day / "signals_latest.parquet", 0)
+    old_txt = _touch(config.CACHE_DIR / "filing_text" / "00" / "a.txt.gz", 40)
+    new_txt = _touch(config.CACHE_DIR / "filing_text" / "00" / "b.txt.gz", 5)
     z_old = _touch(data_dir / "driftrev_snapshot_old.zip", 10)
     z_new = _touch(data_dir / "driftrev_snapshot.zip", 1)
     (config.ARTIFACTS_DIR / "run_log.jsonl").write_text("\n".join("{}" for _ in range(1500)) + "\n")
 
     dry = housekeeping.run(dry_run=True)
-    assert dry["expired"] == 4 and old_root.exists()          # dry run deletes nothing
+    assert dry["expired"] == 5 and old_root.exists()          # dry run deletes nothing
 
     out = housekeeping.run()
-    assert out["expired"] == 4
+    assert out["expired"] == 5 and not old_txt.exists() and new_txt.exists()
     assert not old_root.exists() and not old_page.exists() and not old_day.exists() and not z_old.exists()
     assert new_root.exists() and new_page.exists() and new_day.exists() and z_new.exists()
     assert len((config.ARTIFACTS_DIR / "run_log.jsonl").read_text().splitlines()) == config.SETTINGS.retention.run_log_max_lines

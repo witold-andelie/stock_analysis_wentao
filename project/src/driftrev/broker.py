@@ -136,14 +136,19 @@ def submit_orders(confirm: bool = False, max_positions: int = 5) -> dict[str, An
     plan = preview_orders(max_positions)
     held = _held_tickers()
     client = _trading_client()
+    pending = _open_order_tickers(client)   # audit: a second submit the same day must not duplicate
     results = []
     for o in plan["orders"]:
-        if o["ticker"] in held:
-            results.append({"ticker": o["ticker"], "status": "skipped", "reason": "already held"})
+        if o["ticker"] in held or o["ticker"] in pending:
+            results.append({"ticker": o["ticker"], "status": "skipped",
+                            "reason": "already held" if o["ticker"] in held else "open order exists"})
             continue
         try:
+            # GTC: with DAY, Alpaca can expire the bracket's stop/target legs at the close and leave
+            # the position unprotected. client_order_id makes a same-day resubmit idempotent.
             req = MarketOrderRequest(
-                symbol=o["ticker"], qty=o["qty"], side=OrderSide.BUY, time_in_force=TimeInForce.DAY,
+                symbol=o["ticker"], qty=o["qty"], side=OrderSide.BUY, time_in_force=TimeInForce.GTC,
+                client_order_id=f"driftrev-{o['ticker']}-{date.today():%Y%m%d}",
                 order_class=OrderClass.BRACKET,
                 stop_loss=StopLossRequest(stop_price=round(o["stop_loss_price"], 2)),
                 take_profit=TakeProfitRequest(limit_price=round(o["take_profit_price"], 2)),
@@ -156,6 +161,26 @@ def submit_orders(confirm: bool = False, max_positions: int = 5) -> dict[str, An
     return {"submitted": True, "paper": _paper(), "results": results}
 
 
+def _open_order_tickers(client) -> set[str]:
+    try:
+        from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
+        return {o.symbol for o in client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN))}
+    except Exception as exc:  # unknown -> be conservative and log; held-position guard still applies
+        log.warning("could not list open orders: %s", exc)
+        return set()
+
+
+def expired_tickers(sig: pd.DataFrame, today: date) -> list[str]:
+    """Tickers whose MOST RECENT signal has passed its exit_by_date. Using the latest signal per
+    ticker prevents an old signal's expiry from closing a position opened on a newer signal."""
+    if sig.empty or "exit_by_date" not in sig:
+        return []
+    s = sig.assign(exit_by_date=pd.to_datetime(sig["exit_by_date"], errors="coerce")).dropna(subset=["exit_by_date"])
+    latest = s.groupby("ticker")["exit_by_date"].max()
+    return sorted(latest[latest.dt.date < today].index)
+
+
 def close_expired_positions(today: date | None = None) -> dict[str, Any]:
     """Close positions whose signal's exit_by_date has passed (10-session hold). Dry run
     unless orders are allowed and keys are configured."""
@@ -164,8 +189,7 @@ def close_expired_positions(today: date | None = None) -> dict[str, Any]:
     sig = pd.concat([artifacts.load_frame("signals"), artifacts.load_frame("events")], ignore_index=True)
     if sig.empty or "exit_by_date" not in sig or not configured():
         return {"dry_run": True, "expired": [], "message": "No signals or broker not configured."}
-    sig["exit_by_date"] = pd.to_datetime(sig["exit_by_date"], errors="coerce")
-    expired = sig[sig["exit_by_date"].dt.date < today]["ticker"].unique().tolist()
+    expired = expired_tickers(sig, today)
     held = [t for t in _held_tickers() if t in expired]
     dry = not _allowed()
     results = []

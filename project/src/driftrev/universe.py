@@ -4,8 +4,8 @@ For each name we keep ticker, company, GICS sector / sub-industry, the Wikipedia
 title (used for the pageviews attention feature) and the SEC CIK (mapped through the
 SEC's own company_tickers.json, which is more reliable than the Wikipedia column).
 
-Known limitation, stated in the README: this is a *current-constituents* universe, so
-companies that crashed and were delisted before today are missing (survivorship bias).
+Known limitation, stated in the README: this is a *current-constituents* universe; membership.py (R1)
+adds removed names (is_current_member=False) and the point-in-time membership table.
 """
 
 from __future__ import annotations
@@ -87,11 +87,39 @@ def fetch_universe() -> pd.DataFrame:
     return uni
 
 
+META_TABLE = "universe_meta"
+MAX_AGE_DAYS = 7.0
+
+
+def needs_refresh(meta: dict | None, max_tickers: int, now: pd.Timestamp | None = None) -> bool:
+    """True when the stored universe must be rebuilt: it was truncated by a smaller DRIFTREV_MAX_TICKERS than
+    now requested (0 = all), or it is older than MAX_AGE_DAYS. No meta (legacy table) -> keep it."""
+    if not meta:
+        return False
+    built_max = int(meta.get("max_tickers") or 0)
+    if built_max and (max_tickers == 0 or max_tickers > built_max):
+        return True
+    built_at = pd.to_datetime(meta.get("built_at"), errors="coerce")
+    now = now if now is not None else pd.Timestamp.now()
+    return bool(pd.notna(built_at) and (now - built_at) > pd.Timedelta(days=MAX_AGE_DAYS))
+
+
 def load_or_fetch(refresh: bool = False) -> pd.DataFrame:
-    """Universe is refreshed at most when asked (it changes a few times a quarter)."""
+    """Universe is refreshed when asked, when the stored one was built with a smaller MAX_TICKERS than now,
+    or when it is older than a week (it changes a few times a quarter)."""
     if not refresh and store.table_exists("universe"):
-        uni = store.read_table("universe")
-        return uni.head(config.MAX_TICKERS) if config.MAX_TICKERS else uni
+        meta_df = store.read_table(META_TABLE)
+        meta = meta_df.iloc[0].to_dict() if not meta_df.empty else None
+        if not needs_refresh(meta, config.MAX_TICKERS):
+            uni = store.read_table("universe")
+            return uni.head(config.MAX_TICKERS) if config.MAX_TICKERS else uni
     uni = fetch_universe()
+    uni["is_current_member"] = True
+    if store.table_exists("universe"):       # keep removed names recovered by membership.py (R1)
+        old = store.read_table("universe")
+        if "is_current_member" in old:
+            gone = old[~old["is_current_member"].fillna(True).astype(bool) & ~old["ticker"].isin(uni["ticker"])]
+            uni = pd.concat([uni, gone], ignore_index=True)
     store.replace_table("universe", uni)
+    store.replace_table(META_TABLE, pd.DataFrame({"max_tickers": [int(config.MAX_TICKERS)], "built_at": [pd.Timestamp.now()]}))
     return uni

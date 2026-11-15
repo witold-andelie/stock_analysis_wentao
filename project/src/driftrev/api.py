@@ -38,7 +38,7 @@ def _run(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except ServiceError as e:
-        raise HTTPException(e.status, e.message)
+        raise HTTPException(e.status, e.message) from e
 
 
 AUTH = [Depends(require_auth)]
@@ -112,6 +112,16 @@ def backtest_equity(strategy: str | None = None, weekly: bool = True):
          summary="Model info", description="Model metrics, top feature importances and precision breakdown by dimension.")
 def model(top_n: int = Query(15, ge=1, le=100), dimension: str | None = Query(None, description="Filter breakdown, e.g. 'event_family'.")):
     return _run(service.model_info, top_n, dimension)
+
+
+@app.get("/v1/research", dependencies=AUTH, operation_id="get_research",
+         summary="Research tables",
+         description="Without `table`: list available research tables plus the walk-forward and strategy-guide verdict blocks. "
+                     "With `table` (model_comparison, composition, walkforward, holding_period, uniquely_correct, guide_arms, "
+                     "guide_sensitivity, cost_stress, survivorship, pred_eval, vector_sims, calibration, capacity_study, cost_models): its rows.")
+def research(table: str | None = Query(None, description="Table name; omit to list."),
+             limit: int = Query(200, ge=1, le=5000)):
+    return _run(service.research, table, limit)
 
 
 @app.get("/v1/regime", dependencies=AUTH, operation_id="get_regime",

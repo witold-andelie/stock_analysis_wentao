@@ -27,6 +27,10 @@
     "method": "GET",
     "path": "/v1/model"
   },
+  "get_research": {
+    "method": "GET",
+    "path": "/v1/research"
+  },
   "get_regime": {
     "method": "GET",
     "path": "/v1/regime"

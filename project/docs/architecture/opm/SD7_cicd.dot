@@ -3,7 +3,7 @@
 // in expiring workflow artifacts, and in one rolling Release asset (snapshot for --mode file).
 digraph SD7 {
   graph [rankdir=LR, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.4, ranksep=0.85,
-         label="SD7 · CI/CD on GitHub Actions + Housekeeping · .github/workflows/{ci,daily,cleanup}.yml · driftrev.housekeeping · driftrev.report"];
+         label="SD7 · CI/CD on GitHub Actions + Housekeeping · .github/workflows/{ci,daily,cleanup,image}.yml · driftrev.housekeeping · driftrev.report"];
   node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#ead7ff"];
   edge  [fontname="Helvetica", fontsize=9];
 
@@ -14,7 +14,22 @@ digraph SD7 {
   secret [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Repository Secrets\n(SEC_USER_AGENT)"];
   provid [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Public Data Providers"];
 
+  ghcr   [shape=box, style="filled,dashed", fillcolor="#ffffff", label="GitHub Container Registry\n(ghcr.io/<owner>/driftrev)"];
+  cloud  [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Cloud Targets\n(Google Cloud Run, Fly.io, Render:\ntemplates in project/deploy/)"];
+  operator [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Operator\n(manual step)"];
+  vol    [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Persistent Volume (/data)\n(single DuckDB writer)"];
+
   // objects
+  image  [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#cfe2ff">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Container Image</B> (:latest, :sha-&lt;short&gt;)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">unpublished</TD><TD STYLE="rounded" BGCOLOR="white">published</TD></TR>
+    </TABLE>>];
+  apisvc [shape=plain, style="", label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#d1f0d1">
+      <TR><TD BORDER="0" COLSPAN="2"><B>Hosted API</B> (/health, :8000)</TD></TR>
+      <TR><TD STYLE="rounded" BGCOLOR="white">not deployed</TD><TD STYLE="rounded" BGCOLOR="white">serving</TD></TR>
+    </TABLE>>];
   code   [shape=box, style="filled,bold", fillcolor="#e6e6e6", label="Source Code + OPM model\n(git: project/**)"];
   build  [shape=plain, style="", label=<
     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="4" CELLPADDING="3" BGCOLOR="#ead7ff">
@@ -49,6 +64,8 @@ digraph SD7 {
   p_snap [shape=ellipse, fillcolor="#cfe2ff", label="Releasing Snapshot\n(weekly, replaces previous asset)"];
   p_hk   [shape=ellipse, label="Housekeeping Data Files\n(driftrev.housekeeping)"];
   p_gc   [shape=ellipse, label="Garbage-collecting GitHub\n(cleanup.yml: caches, artifacts,\nworkflow runs, old assets)"];
+  p_img  [shape=ellipse, penwidth=2, fillcolor="#cfe2ff", label="Publishing Container Image\n(image.yml: build, push to ghcr.io,\nrun import check)"];
+  p_dep  [shape=ellipse, fillcolor="#d1f0d1", label="Deploying API (optional)\n(manual: deploy/ manifests)"];
   p_sig  [shape=ellipse, fillcolor="#fff3b0", label="Signalling Event Trades\n(SD4)"];
 
   dev -> p_int [arrowhead=dot]; gha -> p_int [arrowhead=odot]; code -> p_int [arrowhead=odot];
@@ -66,4 +83,11 @@ digraph SD7 {
   cron -> p_gc [arrowhead=dot, label="[weekly]"]; policy -> p_gc [arrowhead=odot];
   p_gc -> cache [dir=both, label="→ expired (deleted)"]; p_gc -> runart [dir=both, label="→ expired (deleted)"];
   p_gc -> snap [dir=both, label="keep latest"];
+
+  // R5: packaging
+  build -> p_img [arrowhead=odot, label="[push to main]"]; gha -> p_img [arrowhead=odot];
+  p_img -> image [dir=both, label="unpublished → published"]; p_img -> ghcr [arrowhead=odot, label="pushes to"];
+  operator -> p_dep [arrowhead=dot]; image -> p_dep [arrowhead=odot, label="[published]"];
+  cloud -> p_dep [arrowhead=odot]; vol -> p_dep [arrowhead=odot]; secret -> p_dep [arrowhead=odot, label="(API token etc.)"];
+  p_dep -> apisvc [dir=both, label="not deployed → serving"];
 }

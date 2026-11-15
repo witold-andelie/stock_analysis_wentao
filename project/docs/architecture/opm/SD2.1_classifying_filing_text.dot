@@ -1,0 +1,52 @@
+// SD2.1 · Classifying Filing Text in-zoomed (roadmap R4): filings in the event windows -> lexicon flags + tone -> filing_text -> ft_* event columns.
+digraph SD2_1 {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=14, labelloc=t, nodesep=0.35, ranksep=0.6,
+         label="SD2.1 · Classifying Filing Text (in-zoomed, R4) · driftrev.filing_text · deterministic lexicon, no LLM\npoint-in-time: only filings accepted in the event window (prev close 16:00 ET .. next 09:00 ET)"];
+  node  [fontname="Helvetica", fontsize=10, style=filled, fillcolor="#e6e6e6"];
+  edge  [fontname="Helvetica", fontsize=9];
+
+  // inputs
+  t_fil  [shape=box, fillcolor="#cfe2ff", label="filings"];
+  events [shape=box, style="filled,bold", label="Event Dataset\n(events table)"];
+  scope  [shape=box, label="Text Scope\n(crash families: all years;\nearnings 2.02 from 2022-01-01;\nmax filings per run)"];
+  sec    [shape=box, style="filled,dashed", fillcolor="#ffffff", label="SEC EDGAR Archives\n(filing index + exhibits)"];
+  lm     [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Loughran-McDonald Dictionary\n(Notre Dame SRAF; curated fallback)"];
+  ua     [shape=box, label="Contact User-Agent"];
+  rl     [shape=box, label="Rate Limiter\n(<= 8 req/s)"];
+
+  // processes
+  p_sel  [shape=ellipse, label="Selecting Target Filings\n(8-K, 424B*, NT 10-K/Q in the window;\nunfetched first, budget-limited)"];
+  p_fet  [shape=ellipse, penwidth=2, label="Fetching Press Releases\n(index -> EX-99.1 | EX-99 | primary;\nresumable, 404-tolerant, retries)"];
+  p_txt  [shape=ellipse, label="Converting HTML to Text\n(capped length)"];
+  p_flag [shape=ellipse, label="Flagging Lexicon Phrases\n(regex + negation guard;\nsnippets for explainability)"];
+  p_tone [shape=ellipse, label="Scoring Tone\n(LM negative / positive / uncertainty %)"];
+  p_agg  [shape=ellipse, label="Attaching Text Flags to Events\n(any flag across the window's filings;\nrefined category)"];
+  p_study [shape=ellipse, label="Studying Text Flags\n(event study + bootstrap CI)"];
+
+  // outputs
+  ex     [shape=box, style="filled,bold", label="Exhibit Text Cache\n(gzip, capped; data/cache/filing_text)"];
+  ft     [shape=box, style="filled,bold", penwidth=2, label="filing_text\n(accession, exhibit_type, n_chars,\nflags, tone, snippets, status, fetched_at)"];
+  fte    [shape=box, label="ft_* event columns\n+ edgar_category_text"];
+  study  [shape=box, style="filled,bold", label="filing_text_study\n(parquet artifact)"];
+
+  // flags / attributes of filing_text
+  ftx [shape=triangle, style=filled, fillcolor=white, peripheries=2, label="", width=0.25, height=0.22];
+  fl  [shape=box, label="Lexicon Flags\n(guidance_cut | raise | reaffirm,\ngoing_concern, offering_priced,\nrestatement, material_weakness,\ninvestigation, clinical_failure,\nexec_departure, covenant, impairment,\nlayoffs, bankruptcy, beat, miss)"];
+  tn  [shape=box, label="Tone Scores\n(lm_negative_pct, lm_positive_pct,\nlm_uncertainty_pct, lm_net_tone)"];
+  ft -> ftx [arrowhead=none]; ftx -> fl [arrowhead=none]; ftx -> tn [arrowhead=none];
+
+  // links
+  events -> p_sel [arrowhead=odot]; t_fil -> p_sel [arrowhead=odot]; scope -> p_sel [arrowhead=odot];
+  ft -> p_sel [arrowhead=odot, label="already\nfetched"];
+  p_sel -> p_fet [style=dashed, label="accession list"];
+  sec -> p_fet [arrowhead=odot]; ua -> p_fet [arrowhead=odot]; rl -> p_fet [arrowhead=odot];
+  p_fet -> p_txt [style=dashed]; p_txt -> ex;
+  ex -> p_flag [arrowhead=odot]; ex -> p_tone [arrowhead=odot]; lm -> p_tone [arrowhead=odot];
+  p_txt -> p_flag [style=dashed]; p_flag -> ft [dir=both]; p_tone -> ft [dir=both];
+  ft -> p_agg [arrowhead=odot]; events -> p_agg [arrowhead=odot]; t_fil -> p_agg [arrowhead=odot];
+  p_agg -> fte;
+  fte -> events [arrowhead=odot, label="joined by index\n(lead, features.build_all)"];
+  ft -> p_study [arrowhead=odot]; events -> p_study [arrowhead=odot]; p_study -> study;
+
+  { rank=same; t_fil; events; scope; sec; lm; }
+}
