@@ -23,7 +23,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _env(name: str, default: str) -> str:
-    return os.environ.get(name, default)
+    """Use defaults for missing or blank values; CI passes unset secrets as empty strings."""
+    return os.environ.get(name, "").strip() or default
 
 
 @dataclass(frozen=True)

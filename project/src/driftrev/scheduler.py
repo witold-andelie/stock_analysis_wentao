@@ -22,7 +22,7 @@ TZ = ZoneInfo(config.MARKET.timezone)
 
 
 def schedule_time() -> str:
-    return os.environ.get("DRIFTREV_SCHEDULE_TIME", config.MARKET.run_time)
+    return os.environ.get("DRIFTREV_SCHEDULE_TIME", "").strip() or config.MARKET.run_time
 
 
 def next_run(now: datetime, hhmm: str) -> datetime:

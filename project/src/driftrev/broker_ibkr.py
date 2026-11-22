@@ -25,6 +25,10 @@ from .broker import DEFAULT_CAPITAL, expired_tickers, size_orders
 log = logging.getLogger("driftrev.broker_ibkr")
 
 
+def _env_or(name: str, default: str) -> str:
+    return os.environ.get(name, "").strip() or default
+
+
 def _paper() -> bool:
     return os.environ.get("IBKR_PAPER", "true").lower() != "false"
 
@@ -35,7 +39,7 @@ def _allowed() -> bool:
 
 def configured() -> bool:
     try:
-        int(os.environ.get("IBKR_PORT", "4002"))
+        int(_env_or("IBKR_PORT", "4002"))
     except ValueError:
         return False
     return os.environ.get("IBKR_ENABLED", "false").lower() == "true"
@@ -51,9 +55,9 @@ def _ib_api():
 def _connect():
     ib = _ib_api().IB()
     try:
-        account = os.environ.get("IBKR_ACCOUNT", "")
-        ib.connect(os.environ.get("IBKR_HOST", "127.0.0.1"), int(os.environ.get("IBKR_PORT", "4002")),
-                   clientId=int(os.environ.get("IBKR_CLIENT_ID", "17")), timeout=10, readonly=False, account=account)
+        account = _env_or("IBKR_ACCOUNT", "")
+        ib.connect(_env_or("IBKR_HOST", "127.0.0.1"), int(_env_or("IBKR_PORT", "4002")),
+                   clientId=int(_env_or("IBKR_CLIENT_ID", "17")), timeout=10, readonly=False, account=account)
         if not account:
             accounts = ib.managedAccounts()
             if not accounts:
