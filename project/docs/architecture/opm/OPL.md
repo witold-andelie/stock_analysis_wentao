@@ -279,3 +279,48 @@ in **Run Artifacts** that expire, and in one rolling **Snapshot Release Asset**.
   for Cloud Run, Fly.io and Render exist (SD7, `project/deploy/`). The deploy itself is a manual **Operator** step;
   nothing is deployed by this repository.
 - ⬜ **R6 Confirming Intraday Entry** feeds **Signalling** (guide Entry B with intraday bars).
+
+### R7 · German equities on Deutsche Börse Xetra, PLANNED
+
+Scope: DAX 40 + MDAX 50 + SDAX 70 (160 names; large / mid / small like S&P 500 / 400 / 600), traded on Xetra
+in EUR. The US system stays the default and must behave exactly as today. All existing invariants hold per
+market: no look-ahead (row *t* uses data available by the Xetra close of *t*), TEST is never used to choose,
+tunables live in `config.py`, orders stay paper by default behind the **Order Guard**. China A-shares stay out of scope.
+
+- ⬜ **R7.1 Selecting Market** affects **Market** (*us* | *de*). **Market** exhibits exchange calendar, timezone,
+  scheduled run time (US 22:30 ET; DE 18:30 CET, after the 17:30 Xetra close), currency, benchmark and sector
+  series, **Cost Model**, index set and its own data directory (one DuckDB writer per market).
+  **Acquiring** and **Signalling** require **Market**. [OPS/ING]
+- ⬜ **R7.2 Loading German Index Membership** requires **Public Sources (de)** (DAX / MDAX / SDAX constituent
+  pages and their change history) and yields **membership_history (de)** (ticker, ISIN, index, start, end), which
+  **universe** requires. ISIN replaces the SEC CIK as the stable key; Yahoo serves Xetra prices as `<symbol>.DE`.
+  The September 2021 index reform (DAX 30 → 40, MDAX 60 → 50) must be reconstructed. If history cannot be
+  reconstructed, the gap is reported as survivorship bias exactly as in SD1. [ING]
+  *Source check 2026-11-22:* DAX: current 40 + change table (en "DAX" 66 rows, de "DAX" § Zusammensetzungshistorie
+  77 rows). MDAX: current 50 + full change table on de "MDAX/Zusammensetzungshistorie" (293 rows, 1994 → 2026; company
+  names only, no tickers, so a name → ISIN → Yahoo map is needed). SDAX: current 70 with "im SDAX seit" only, no change
+  history page; SDAX moves are partly visible in the MDAX table (names going up or down). 🟡 so SDAX keeps a survivorship
+  gap, like the S&P 600 before 2019-12. Yahoo has no prices for delisted names (Wirecard `WDI.DE`, Osram `OSR.DE`
+  returned empty). Wikimedia rate-limits bursts (HTTP 429): use the REST page endpoint, a cache and pauses.
+- ⬜ **R7.3 Loading German Market Series** requires **Public Sources (de)** and feeds **Acquiring**: DAX, MDAX and
+  SDAX index levels as benchmarks for D(t,L), a volatility gauge and Bund yields for the regime monitor. [ING]
+  *Source check 2026-11-22:* Yahoo serves `^GDAXI`, `^MDAXI`, `^SDAXI`, `^TECDAX`, `^STOXX50E` and the iShares DAX ETF
+  `EXS1.DE` daily from 2014. VDAX-NEW and VSTOXX are **not** served (`^V1X`, `V1X.DE`, `^VDAX`, `^V2TX` empty), so the
+  volatility gauge is a realised-volatility proxy. The daily 10-year Bund yield comes from the Bundesbank time-series
+  API (`BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A`, CSV, 2014 → today); FRED only has it monthly.
+- ⬜ **R7.4 Detecting German Breakouts** requires **membership_history (de)** and feeds **Transforming**. It is the
+  first German event family because it needs prices only: the rolling-window Variant B state is computed against
+  the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
+  rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or
+  modelled separately is decided on VALIDATION. [TRF/RES]
+- ⬜ **R7.5 Dating German Releases** requires **Public Sources (de)** and feeds **Transforming**: earnings release
+  dates for the *earnings_** families and MAR Art. 17 ad-hoc notices as the analogue of SEC 8-K items for
+  *shock_crash* causes. A release after the 17:30 CET close maps to the next session. [ING/TRF]
+  *Source check 2026-11-22:* Yahoo `get_earnings_dates` covers German names back to 2014 with EPS estimate and
+  reported EPS (SAP, Allianz, Evonik, Bilfinger: ~49 past releases each), so the *earnings_** families and the
+  consensus surprise are feasible. Its timestamps come in US Eastern time and are sometimes only a date, so the
+  session mapping must be checked against prices. No free, documented bulk archive of ad-hoc notices was found
+  (EQS publishes per-issuer IR feeds only), so ad-hoc causes for *shock_crash* stay ⬜ until a source exists; German
+  crashes can still be detected from prices, without a cause taxonomy.
+- ⬜ **R7.6 Trading on Xetra** requires **Signal Book** and **Deutsche Börse Xetra** and feeds **Serving**: a broker
+  bridge that can route EUR orders to Xetra (Alpaca is US-only), paper by default, behind the same **Order Guard**. [OPS]

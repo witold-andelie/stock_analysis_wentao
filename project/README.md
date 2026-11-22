@@ -1,7 +1,7 @@
 # Drift or Reversal? An event-driven ML trading system for the S&P 1500
 
 Final project for the [Stock Markets Analytics Zoomcamp 2026](https://github.com/DataTalksClub/stock-markets-analytics-zoomcamp).
-Scope: **US equities only**.
+Scope: **US equities** (implemented). **German equities on Xetra** (DAX + MDAX + SDAX) are on the roadmap as R7.
 
 > **The question, asked every evening for every S&P 1500 stock that just had an information shock:**
 > will the move **drift** (continue) or **revert** over the next 10 sessions, after costs?
@@ -451,7 +451,7 @@ Development is **model-first** ([`AGENTS.md`](AGENTS.md)). Every feature is firs
 | [`SD3_researching`](docs/architecture/opm/svg/SD3_researching.svg) | purged split, model variants, book composition, tuning, thresholds, simulations, walk-forward, guide arms |
 | [`SD4_signalling`](docs/architecture/opm/svg/SD4_signalling.svg) | scoring, cap-aware net edge, tiering with regime downgrade, sizing and exits, publishing |
 | [`SD5_serving_trading`](docs/architecture/opm/svg/SD5_serving_trading.svg) | REST / tools.json / MCP, auth, research tables, jobs, notifications, dashboard, order guard |
-| [`SD6_roadmap`](docs/architecture/opm/svg/SD6_roadmap.svg) | R1–R5 implemented; R6 (intraday entry) planned |
+| [`SD6_roadmap`](docs/architecture/opm/svg/SD6_roadmap.svg) | R1–R5 implemented; R6 (intraday entry) and R7 (German equities on Xetra) planned |
 | [`SD7_cicd`](docs/architecture/opm/svg/SD7_cicd.svg) | CI, daily CD, Pages, GHCR image, snapshot release, housekeeping, GitHub garbage collection |
 
 ```

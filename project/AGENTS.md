@@ -22,4 +22,6 @@ architecture contract.
    .venv/bin/python scripts/render_opm.py
    PYTHONPATH=src .venv/bin/python -m pytest tests -q
    ```
-6. **The roadmap lives in `SD6_roadmap.dot`** (R1…R6). Pick work from there; extend it there first. Scope is US equities only: China A-shares are explicitly out of scope.
+6. **The roadmap lives in `SD6_roadmap.dot`** (R1…R7). Pick work from there; extend it there first. Scope is US equities
+   (implemented) and German equities on Deutsche Börse Xetra, DAX + MDAX + SDAX (R7, planned). China A-shares are
+   explicitly out of scope.

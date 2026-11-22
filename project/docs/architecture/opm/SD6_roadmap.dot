@@ -31,4 +31,28 @@ digraph SD6 {
   r4 -> transforming [style=dashed];
   r5 -> serving [dir=both];
   r6 -> signalling [style=dashed];
+
+  // R7 · German equities on Deutsche Börse Xetra (DAX + MDAX + SDAX). Order of delivery: R7.1 → R7.6.
+  subgraph cluster_r7 {
+    label="R7 · German equities (Xetra: DAX 40 + MDAX 50 + SDAX 70) · PLANNED"; style="rounded,dotted"; color="#999999";
+    node [style="filled,dotted", fillcolor="#f2f2f2"];
+    market   [shape=box, label="Market\n(us | de: calendar, timezone, run time,\ncurrency, benchmarks, cost model,\nindex set, data dir)"];
+    r71 [shape=ellipse, label="R7.1 Selecting Market\n(config.Market; US stays the default\nand behaves exactly as today)"];
+    r72 [shape=ellipse, label="R7.2 Loading German Index Membership\n(DAX/MDAX/SDAX constituents + change\ntables; ISIN key; Yahoo .DE tickers)"];
+    r72o [shape=box, label="membership_history (de)\n(ticker, isin, index, start, end)"];
+    r73 [shape=ellipse, label="R7.3 Loading German Market Series\n(DAX/MDAX/SDAX indices, VDAX or\nrealised-vol proxy, Bund yields)"];
+    r74 [shape=ellipse, label="R7.4 Detecting German Breakouts\n(price-only family first:\nrolling-window Variant B, EUR liquidity)"];
+    r75 [shape=ellipse, label="R7.5 Dating German Releases\n(earnings dates + MAR Art. 17 ad-hoc\nnotices as the 8-K analogue)"];
+    r76 [shape=ellipse, label="R7.6 Trading on Xetra\n(broker bridge for EUR orders,\npaper default, same Order Guard)"];
+    xetra [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Deutsche Börse Xetra\n(17:30 CET close)"];
+    srcs  [shape=box, style="filled,dashed", fillcolor="#ffffff", label="Public Sources (de), checked 2026-11-22\nWikipedia DAX/MDAX change tables (SDAX: none)\nYahoo .DE prices, indices, earnings dates\nBundesbank daily Bund yield\n(no VDAX; no bulk ad-hoc archive)"];
+  }
+
+  r71 -> market [dir=both];
+  market -> acquiring [arrowhead=odot]; market -> signalling [arrowhead=odot];
+  srcs -> r72 [arrowhead=odot]; r72 -> r72o; r72o -> universe [arrowhead=odot];
+  srcs -> r73 [arrowhead=odot]; r73 -> acquiring [style=dashed];
+  r72o -> r74 [arrowhead=odot]; r74 -> transforming [style=dashed];
+  srcs -> r75 [arrowhead=odot]; r75 -> transforming [style=dashed];
+  book -> r76 [arrowhead=odot]; xetra -> r76 [arrowhead=odot]; r76 -> serving [style=dashed];
 }

@@ -4,8 +4,9 @@ Guide thesis: after an unusually strong benchmark-relative advance, a stock may 
 early gains age out of a rolling measurement window, the measured extreme falls mechanically
 even if the price does not. A renewed advance is tradable only if genuine demand confirms it.
 
-Scope: US equities only. US exchanges have no cumulative-deviation threshold rule (NYSE/Nasdaq
-LULD is a 5-minute band), so "release" is used ONLY as a statistical feature; the guide's
+Scope: US equities (and German Xetra equities, roadmap R7). Neither venue has a cumulative-deviation
+threshold rule (NYSE/Nasdaq LULD is a 5-minute band; Xetra volatility interruptions are per-trade
+price ranges), so "release" is used ONLY as a statistical feature; the guide's
 exchange-rule variant (Variant A / Arm D) is out of scope for this project.
 
 Definitions (guide Section 3), P = stock close, B = benchmark close (SPY):
