@@ -28,7 +28,7 @@ def _env(name: str, default: str) -> str:
 
 @dataclass(frozen=True)
 class Market:
-    """One tradable market. R7.1: `us` is implemented, `de` is declared only (R7.2+)."""
+    """One tradable market; `us` and `de` have implemented daily pipelines."""
 
     code: str
     name: str
@@ -94,7 +94,7 @@ MARKETS: dict[str, Market] = {
         min_dollar_volume=1e6,
         breakout_min_median_turnover=5e6,
         data_subdir="de",
-        implemented=False,
+        implemented=True,
     ),
 }
 

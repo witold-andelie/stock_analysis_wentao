@@ -109,7 +109,8 @@ def build() -> dict:
     # chart the PRE-DECLARED headline strategy (config book), never the best-looking one on TEST (that would be
     # selection on the test set, audit F)
     best_name = m.get("best_strategy") or None
-    chart = equity_svg(eq, [n for n in (best_name, "SPY_buy_hold", "hw1_momentum_top_quintile") if n])
+    benchmark = f"{config.MARKET.primary_benchmark}_buy_hold"
+    chart = equity_svg(eq, [n for n in (best_name, benchmark, "hw1_momentum_top_quintile") if n])
     wf_rows = pd.DataFrame([{k: v for k, v in wf.items() if not isinstance(v, (dict, list))}]) if wf else pd.DataFrame()
     guide = m.get("guide") or {}
     when = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
@@ -145,10 +146,13 @@ a{color:var(--accent)}
     kpis = [("Data through", m.get("data_through", "?")), ("Regime", reg.get("state", "?")),
             ("Signals today", len(sig)), ("Universe", m.get("universe_size", "?")),
             ("Best CAGR (test)", f"{best.get('name', '?')}: {_fmt('cagr', best.get('cagr'))}" if len(strat) else "–")]
+    description = ("Event-driven ML on Xetra DAX + MDAX + SDAX (crash reversal · momentum breakout)."
+                   if config.MARKET.code == "de" else
+                   "Event-driven ML on the S&amp;P 1500 (earnings drift · crash reversal · momentum breakout).")
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Drift or Reversal</title><style>{css}</style></head><body>
 <h1>Drift or Reversal? Daily results</h1>
-<p class="muted">Event-driven ML on the S&amp;P 1500 (earnings drift · crash reversal · momentum breakout). Generated {when} by GitHub Actions.
+<p class="muted">{description} Generated {when} by GitHub Actions.
 Machine-readable: <a href="signals.json">signals.json</a> · <a href="events_recent.json">events_recent.json</a> · <a href="metrics.json">metrics.json</a></p>
 <div class="kpis">{''.join(f'<div class="kpi"><span class="muted">{html.escape(k)}</span><b>{html.escape(str(v))}</b></div>' for k, v in kpis)}</div>
 <h2>Signals for the latest session</h2>{_table_html(sig, SIG_COLS)}

@@ -13,7 +13,7 @@
 <g id="clust1" class="cluster">
 <title>cluster_r7</title>
 <path fill="none" stroke="#999999" stroke-dasharray="1,5" d="M70.29,-199C70.29,-199 1512.62,-199 1512.62,-199 1518.62,-199 1524.62,-205 1524.62,-211 1524.62,-211 1524.62,-726 1524.62,-726 1524.62,-732 1518.62,-738 1512.62,-738 1512.62,-738 70.29,-738 70.29,-738 64.29,-738 58.29,-732 58.29,-726 58.29,-726 58.29,-211 58.29,-211 58.29,-205 64.29,-199 70.29,-199"/>
-<text xml:space="preserve" text-anchor="middle" x="791.46" y="-720.7" font-family="Helvetica,sans-Serif" font-size="14.00">R7 · German equities (Xetra: DAX 40 + MDAX 50 + SDAX 70) · PLANNED</text>
+<text xml:space="preserve" text-anchor="middle" x="791.46" y="-720.7" font-family="Helvetica,sans-Serif" font-size="14.00">R7 · German equities (Xetra: DAX 40 + MDAX 50 + SDAX 70) · mostly implemented</text>
 </g>
 <!-- acquiring -->
 <g id="node1" class="node">
@@ -24,8 +24,8 @@
 <!-- transforming -->
 <g id="node2" class="node">
 <title>transforming</title>
-<ellipse fill="#e6e6e6" stroke="black" cx="1635.68" cy="-415" rx="60.06" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="1635.68" y="-411.12" font-family="Helvetica,sans-Serif" font-size="10.00">Transforming (SD2)</text>
+<ellipse fill="#e6e6e6" stroke="black" cx="1635.68" cy="-413" rx="60.06" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1635.68" y="-409.12" font-family="Helvetica,sans-Serif" font-size="10.00">Transforming (SD2)</text>
 </g>
 <!-- researching -->
 <g id="node3" class="node">
@@ -76,8 +76,8 @@
 <!-- universe -->
 <g id="node6" class="node">
 <title>universe</title>
-<polygon fill="#cfe2ff" stroke="black" points="1662.68,-695 1608.68,-695 1608.68,-659 1662.68,-659 1662.68,-695"/>
-<text xml:space="preserve" text-anchor="middle" x="1635.68" y="-673.12" font-family="Helvetica,sans-Serif" font-size="10.00">universe</text>
+<polygon fill="#cfe2ff" stroke="black" points="1662.68,-696 1608.68,-696 1608.68,-660 1662.68,-660 1662.68,-696"/>
+<text xml:space="preserve" text-anchor="middle" x="1635.68" y="-674.12" font-family="Helvetica,sans-Serif" font-size="10.00">universe</text>
 </g>
 <!-- report -->
 <g id="node7" class="node">
@@ -122,9 +122,9 @@
 <!-- r1&#45;&gt;universe -->
 <g id="edge3" class="edge">
 <title>r1&#45;&gt;universe</title>
-<path fill="none" stroke="black" d="M408.52,-822.7C480.68,-824.52 562.21,-826 636.59,-826 636.59,-826 636.59,-826 1363.12,-826 1464.16,-826 1563.17,-745.74 1608.7,-703.03"/>
+<path fill="none" stroke="black" d="M408.52,-822.7C480.68,-824.52 562.21,-826 636.59,-826 636.59,-826 636.59,-826 1363.12,-826 1463.75,-826 1562.59,-746.67 1608.32,-704.17"/>
 <polygon fill="black" stroke="black" points="408.63,-819.2 398.54,-822.44 408.45,-826.2 408.63,-819.2"/>
-<polygon fill="black" stroke="black" points="1610.91,-705.75 1615.73,-696.32 1606.08,-700.69 1610.91,-705.75"/>
+<polygon fill="black" stroke="black" points="1610.53,-706.9 1615.39,-697.49 1605.72,-701.82 1610.53,-706.9"/>
 </g>
 <!-- r1o -->
 <g id="node10" class="node">
@@ -162,8 +162,8 @@
 <!-- r4&#45;&gt;transforming -->
 <g id="edge8" class="edge">
 <title>r4&#45;&gt;transforming</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M1487.98,-176.45C1501.11,-180.87 1513.65,-186.89 1524.62,-195 1588.59,-242.26 1617.73,-337.17 1628.86,-385.41"/>
-<polygon fill="black" stroke="black" points="1625.44,-386.11 1630.99,-395.13 1632.27,-384.61 1625.44,-386.11"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M1487.95,-176.49C1501.09,-180.91 1513.63,-186.91 1524.62,-195 1588.21,-241.8 1617.52,-335.86 1628.78,-383.67"/>
+<polygon fill="black" stroke="black" points="1625.33,-384.3 1630.93,-393.29 1632.17,-382.77 1625.33,-384.3"/>
 </g>
 <!-- r5 -->
 <g id="node14" class="node">
@@ -253,37 +253,37 @@
 <!-- r72b -->
 <g id="node19" class="node">
 <title>r72b</title>
-<ellipse fill="#cfe2ff" stroke="black" cx="1362.12" cy="-506" rx="154.5" ry="31.64"/>
-<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-514.88" font-family="Helvetica,sans-Serif" font-size="10.00">R7.2b Resolving German Symbols &amp; Prices ✓</text>
-<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-502.12" font-family="Helvetica,sans-Serif" font-size="10.00">(Yahoo search → .DE symbol, ISIN;</text>
-<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-489.38" font-family="Helvetica,sans-Serif" font-size="10.00">Hamburg prices for delisted names)</text>
+<ellipse fill="#cfe2ff" stroke="black" cx="1362.12" cy="-508" rx="154.5" ry="31.64"/>
+<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-516.88" font-family="Helvetica,sans-Serif" font-size="10.00">R7.2b Resolving German Symbols &amp; Prices ✓</text>
+<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-504.12" font-family="Helvetica,sans-Serif" font-size="10.00">(Yahoo search → .DE symbol, ISIN;</text>
+<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-491.38" font-family="Helvetica,sans-Serif" font-size="10.00">Hamburg prices for delisted names)</text>
 </g>
 <!-- r72b&#45;&gt;universe -->
 <g id="edge17" class="edge">
 <title>r72b&#45;&gt;universe</title>
-<path fill="none" stroke="black" d="M1421.1,-542.51C1474.88,-576.37 1553.24,-625.72 1598.58,-654.27"/>
-<polygon fill="black" stroke="black" points="1422.97,-539.55 1412.64,-537.18 1419.24,-545.47 1422.97,-539.55"/>
-<polygon fill="black" stroke="black" points="1596.67,-657.2 1606.99,-659.57 1600.4,-651.28 1596.67,-657.2"/>
+<path fill="none" stroke="black" d="M1421.42,-544.49C1475.22,-578.18 1553.43,-627.13 1598.67,-655.45"/>
+<polygon fill="black" stroke="black" points="1423.29,-541.54 1412.95,-539.2 1419.57,-547.47 1423.29,-541.54"/>
+<polygon fill="black" stroke="black" points="1596.72,-658.37 1607.06,-660.71 1600.44,-652.43 1596.72,-658.37"/>
 </g>
 <!-- r72o&#45;&gt;r72b -->
 <g id="edge16" class="edge">
 <title>r72o&#45;&gt;r72b</title>
-<path fill="none" stroke="black" d="M1056.06,-499.5C1096.57,-500.37 1149.18,-501.49 1199.28,-502.55"/>
-<ellipse fill="none" stroke="black" cx="1203.77" cy="-502.65" rx="4" ry="4"/>
+<path fill="none" stroke="black" d="M1056.06,-499.88C1096.75,-500.96 1149.66,-502.37 1199.96,-503.71"/>
+<ellipse fill="none" stroke="black" cx="1204.16" cy="-503.82" rx="4" ry="4"/>
 </g>
 <!-- r74 -->
 <g id="node24" class="node">
 <title>r74</title>
-<ellipse fill="#f2f2f2" stroke="black" stroke-dasharray="1,5" cx="1362.12" cy="-415" rx="132.23" ry="29.52"/>
-<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-422.38" font-family="Helvetica,sans-Serif" font-size="10.00">R7.4 Detecting German Breakouts</text>
-<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-411.12" font-family="Helvetica,sans-Serif" font-size="10.00">(price&#45;only family first:</text>
-<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-399.88" font-family="Helvetica,sans-Serif" font-size="10.00">rolling&#45;window Variant B, EUR liquidity)</text>
+<ellipse fill="#fff3b0" stroke="black" cx="1362.12" cy="-413" rx="148.14" ry="30.58"/>
+<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-421.12" font-family="Helvetica,sans-Serif" font-size="10.00">R7.4 German events end to end ✓ (R7.4a&#45;g)</text>
+<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-408.38" font-family="Helvetica,sans-Serif" font-size="10.00">(price&#45;only family first:</text>
+<text xml:space="preserve" text-anchor="middle" x="1362.12" y="-397.12" font-family="Helvetica,sans-Serif" font-size="10.00">rolling&#45;window Variant B, EUR liquidity)</text>
 </g>
 <!-- r72o&#45;&gt;r74 -->
 <g id="edge20" class="edge">
 <title>r72o&#45;&gt;r74</title>
-<path fill="none" stroke="black" d="M1056.06,-482.39C1113.12,-469.78 1194.21,-451.87 1258.44,-437.68"/>
-<ellipse fill="none" stroke="black" cx="1262.6" cy="-436.76" rx="4" ry="4"/>
+<path fill="none" stroke="black" d="M1056.06,-482.01C1111.39,-469.49 1189.32,-451.87 1252.56,-437.56"/>
+<ellipse fill="none" stroke="black" cx="1256.6" cy="-436.65" rx="4" ry="4"/>
 </g>
 <!-- r73 -->
 <g id="node21" class="node">
@@ -302,16 +302,16 @@
 <!-- r74b -->
 <g id="node22" class="node">
 <title>r74b</title>
-<ellipse fill="#fff3b0" stroke="black" cx="984.38" cy="-412" rx="110.49" ry="30.58"/>
-<text xml:space="preserve" text-anchor="middle" x="984.38" y="-420.12" font-family="Helvetica,sans-Serif" font-size="10.00">R7.4b German Event Dataset ✓</text>
-<text xml:space="preserve" text-anchor="middle" x="984.38" y="-407.38" font-family="Helvetica,sans-Serif" font-size="10.00">(de_pipeline: shared build_all,</text>
-<text xml:space="preserve" text-anchor="middle" x="984.38" y="-396.12" font-family="Helvetica,sans-Serif" font-size="10.00">crash + breakout, 6,445 events)</text>
+<ellipse fill="#fff3b0" stroke="black" cx="984.38" cy="-411" rx="110.49" ry="30.58"/>
+<text xml:space="preserve" text-anchor="middle" x="984.38" y="-419.12" font-family="Helvetica,sans-Serif" font-size="10.00">R7.4b German Event Dataset ✓</text>
+<text xml:space="preserve" text-anchor="middle" x="984.38" y="-406.38" font-family="Helvetica,sans-Serif" font-size="10.00">(de_pipeline: shared build_all,</text>
+<text xml:space="preserve" text-anchor="middle" x="984.38" y="-395.12" font-family="Helvetica,sans-Serif" font-size="10.00">crash + breakout, 6,445 events)</text>
 </g>
 <!-- r74b&#45;&gt;r74 -->
 <g id="edge23" class="edge">
 <title>r74b&#45;&gt;r74</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M1095.07,-412.88C1133.58,-413.18 1177.43,-413.53 1218.26,-413.86"/>
-<polygon fill="black" stroke="black" points="1218.15,-417.36 1228.17,-413.94 1218.2,-410.36 1218.15,-417.36"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M1095.32,-411.59C1128.89,-411.76 1166.48,-411.96 1202.6,-412.16"/>
+<polygon fill="black" stroke="black" points="1202.22,-415.65 1212.24,-412.21 1202.25,-408.65 1202.22,-415.65"/>
 </g>
 <!-- r74a -->
 <g id="node23" class="node">
@@ -324,14 +324,14 @@
 <!-- r74a&#45;&gt;r74b -->
 <g id="edge22" class="edge">
 <title>r74a&#45;&gt;r74b</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M777.84,-409.62C805.84,-409.94 835.06,-410.28 862.39,-410.6"/>
-<polygon fill="black" stroke="black" points="862.01,-414.09 872.05,-410.71 862.09,-407.09 862.01,-414.09"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M777.84,-409.21C805.84,-409.46 835.06,-409.71 862.39,-409.95"/>
+<polygon fill="black" stroke="black" points="862.02,-413.44 872.05,-410.03 862.08,-406.44 862.02,-413.44"/>
 </g>
 <!-- r74&#45;&gt;transforming -->
 <g id="edge21" class="edge">
 <title>r74&#45;&gt;transforming</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M1494.53,-415C1518.51,-415 1542.68,-415 1564.03,-415"/>
-<polygon fill="black" stroke="black" points="1563.74,-418.5 1573.74,-415 1563.74,-411.5 1563.74,-418.5"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M1510.42,-413C1529.07,-413 1547.41,-413 1564.05,-413"/>
+<polygon fill="black" stroke="black" points="1563.77,-416.5 1573.77,-413 1563.77,-409.5 1563.77,-416.5"/>
 </g>
 <!-- r75 -->
 <g id="node25" class="node">
@@ -344,8 +344,8 @@
 <!-- r75&#45;&gt;transforming -->
 <g id="edge25" class="edge">
 <title>r75&#45;&gt;transforming</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M731.82,-607.28C900.45,-638.97 1262.9,-683.88 1524.62,-552 1571.09,-528.59 1604.49,-475.57 1621.61,-442.78"/>
-<polygon fill="black" stroke="black" points="1624.53,-444.76 1625.91,-434.26 1618.28,-441.61 1624.53,-444.76"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M730.65,-607.65C898.95,-640.4 1263.02,-687.75 1524.62,-554 1571.9,-529.83 1605.12,-475.04 1621.97,-441.32"/>
+<polygon fill="black" stroke="black" points="1625.02,-443.07 1626.21,-432.54 1618.71,-440.03 1625.02,-443.07"/>
 </g>
 <!-- r76&#45;&gt;serving -->
 <g id="edge28" class="edge">

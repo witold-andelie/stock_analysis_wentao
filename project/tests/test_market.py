@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -67,7 +68,7 @@ def test_de_market_definition():
     assert market.benchmarks == (("^GDAXI", "dax"), ("^MDAXI", "mdax"), ("^SDAXI", "sdax"))
     assert market.cost_bps_one_way == (("large", 10.0), ("mid", 20.0), ("small", 35.0))
     assert market.data_subdir == "de"
-    assert market.implemented is False
+    assert market.implemented is True
     assert market.cap_bucket("sdax") == "small"
     assert market.cap_bucket("sp500") is None
     assert market.cost_bps("unknown") == 20.0
@@ -95,21 +96,29 @@ def test_invalid_market_env_fails_at_import(tmp_path):
     assert "unknown market 'xx'" in result.stderr
 
 
-def test_require_implemented_market():
+def test_require_implemented_market(monkeypatch):
     assert config.require_implemented_market(config.MARKETS["us"]) is config.MARKETS["us"]
+    market = replace(config.MARKETS["de"], code="xx", implemented=False)
+    monkeypatch.setattr(config, "MARKET", market)
     with pytest.raises(config.MarketNotImplementedError, match="R7.2"):
-        config.require_implemented_market(config.MARKETS["de"])
+        config.require_implemented_market()
+    with pytest.raises(config.MarketNotImplementedError, match="R7.2"):
+        config.require_implemented_market(market)
 
 
-def test_pipeline_refuses_de(tmp_path):
+def test_pipeline_refuses_unimplemented_market(tmp_path):
     result = _run_python(tmp_path, """
+        from dataclasses import replace
+        from unittest.mock import patch
+
         from driftrev import config, pipeline
 
-        try:
-            pipeline.run_pipeline(mode="update")
-        except config.MarketNotImplementedError as exc:
-            print(type(exc).__name__)
-            raise SystemExit(0)
+        with patch.object(config, "MARKET", replace(config.MARKETS["de"], code="xx", implemented=False)):
+            try:
+                pipeline.run_pipeline(mode="update")
+            except config.MarketNotImplementedError as exc:
+                print(type(exc).__name__)
+                raise SystemExit(0)
         raise AssertionError("pipeline accepted an unimplemented market")
     """, market="de")
     assert result.returncode == 0, result.stderr

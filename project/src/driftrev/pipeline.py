@@ -400,6 +400,9 @@ def publish_live(ml: pd.DataFrame, panel: pd.DataFrame, uni: pd.DataFrame, bundl
         if not preds.empty else (lambda p, c=None: None)
     sig = signals.build_signals(recent, prob, bundle["threshold"], bundle["name"], lookup)
     latest = sig[sig["date"] == data_through]
+    if config.MARKET.code == "de":
+        # Regional/other-venue names are delisted and untradeable; retain them only in event history.
+        latest = latest[latest["ticker"].str.endswith(".DE", na=False)]
     artifacts.save_frame("events", sig)
     artifacts.save_frame("signals", latest)
     pr = panel[panel["date"] >= data_through - pd.Timedelta(days=380)][["ticker", "date", "open", "high", "low", "close", "volume"]]
@@ -421,12 +424,16 @@ def regime_block(ctx: pd.DataFrame) -> dict:
     """Fragility monitor on the latest market day (TradePulse idea): 5 flags -> points -> state."""
     last = ctx.dropna(subset=["regime_points"]).sort_values("date").iloc[-1]
     flags = {k: int(last[k]) for k in ("flag_trend", "flag_vix_term", "flag_corr", "flag_breadth", "flag_credit") if k in last}
+    explain = ("1 point per trigger: DAX<200d MA, DAX realised-vol term (20/60)>1, "
+               "sector-correlation pctile>0.9 (n/a for DE), breadth<40% above 200d MA, credit spread (n/a for DE). "
+               "0-1 normal, 2-3 elevated, 4+ stressed." if config.MARKET.code == "de" else
+               "1 point per trigger: SPY<200d MA, VIX/VIX3M>1, sector-correlation pctile>0.9, "
+               "breadth<40% above 200d MA, Baa-10y spread +25bp/20d. 0-1 normal, 2-3 elevated, 4+ stressed.")
     return {"state": str(last["regime_state"]), "points": int(last["regime_points"]),
             "as_of": pd.Timestamp(last["date"]).date().isoformat(), "flags": flags,
             "vix": float(last.get("vix", np.nan)), "vix_term": float(last.get("vix_term", np.nan)),
             "breadth_above_200": float(last.get("breadth_above_200", np.nan)),
-            "explain": "1 point per trigger: SPY<200d MA, VIX/VIX3M>1, sector-correlation pctile>0.9, "
-                       "breadth<40% above 200d MA, Baa-10y spread +25bp/20d. 0-1 normal, 2-3 elevated, 4+ stressed."}
+            "explain": explain}
 
 
 # --------------------------------------------------------------------------------------
@@ -434,11 +441,23 @@ def regime_block(ctx: pd.DataFrame) -> dict:
 # --------------------------------------------------------------------------------------
 def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False) -> dict:
     config.require_implemented_market()
+    if config.MARKET.code == "de" and mode == "file":
+        raise ValueError("mode 'file' is not supported for market 'de' yet")
     t0 = time.time()
     started = datetime.now(UTC).isoformat()
     steps: dict = {}
     try:
-        if mode == "update":
+        if config.MARKET.code == "de":
+            from . import de_pipeline
+
+            if mode == "update":
+                steps["ingest"] = de_pipeline.ingest_de()
+                data = de_pipeline.transform_de()
+            elif mode == "warehouse":
+                data = de_pipeline.load_from_warehouse_de()
+            else:
+                raise ValueError(f"unknown mode {mode!r}")
+        elif mode == "update":
             steps["ingest"] = ingest()
             data = transform()
         elif mode == "file":
@@ -461,7 +480,7 @@ def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False
                         "universe_size": int(_current(data["universe"])["ticker"].nunique()),
                         "universe_size_incl_removed": int(data["universe"]["ticker"].nunique()),
                         "n_events": int(len(data["events"])), "n_panel_rows": int(len(data["panel"])),
-                        "regime": regime_block(data["ctx"]), "mode": mode})
+                        "regime": regime_block(data["ctx"]), "mode": mode, "market": config.MARKET.code})
         artifacts.save_metrics(metrics)
         # SD7: dated copy of the signal book, static results site, retention of expired files
         housekeeping.archive_signals(metrics["data_through"])
@@ -475,7 +494,8 @@ def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False
         status, err = "failed", f"{type(exc).__name__}: {exc}"
         log.exception("pipeline failed")
     entry = {"started": started, "finished": datetime.now(UTC).isoformat(), "mode": mode, "retrain": retrain,
-             "status": status, "error": err, "seconds": round(time.time() - t0, 1), "steps": steps}
+             "status": status, "error": err, "seconds": round(time.time() - t0, 1), "steps": steps,
+             "market": config.MARKET.code}
     artifacts.append_run_log(entry)
     if err:
         raise RuntimeError(err)

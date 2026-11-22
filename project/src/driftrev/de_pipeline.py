@@ -45,6 +45,15 @@ def universe_for_features(universe_de: pd.DataFrame) -> pd.DataFrame:
     return uni[FEATURE_UNIVERSE_COLS].reset_index(drop=True)
 
 
+def ingest_de(refresh: bool = False) -> dict:
+    """Update German market series, rates, membership, universe and prices."""
+    _require_de()
+    report = {"market": de_market.update_de_market(), "rates": de_market.update_de_rates()}
+    report["membership"] = de_membership.update_de_membership(refresh=refresh)
+    report["universe"] = de_universe.update_de_universe()
+    return report
+
+
 def transform_de(save: bool = True) -> dict[str, pd.DataFrame]:
     """Build German events, daily panel and context, optionally replacing warehouse tables."""
     _require_de()
@@ -71,6 +80,14 @@ def transform_de(save: bool = True) -> dict[str, pd.DataFrame]:
     return {"events": ev, "panel": panel, "market": market, "universe": uni, "ctx": ctx}
 
 
+def load_from_warehouse_de() -> dict[str, pd.DataFrame]:
+    """Load the transformed German warehouse with the shared feature universe schema."""
+    _require_de()
+    return {"events": store.read_table("events"), "panel": store.read_table("daily_panel"),
+            "market": prices.load_market(), "universe": universe_for_features(store.read_table(de_universe.TABLE)),
+            "ctx": store.read_table("market_ctx")}
+
+
 def event_summary(events: pd.DataFrame) -> dict:
     """JSON-compatible counts and date coverage for the German event dataset."""
     if events.empty:
@@ -88,10 +105,7 @@ def event_summary(events: pd.DataFrame) -> dict:
 
 def run_de(refresh: bool = False) -> dict:
     """Update German raw inputs, transform them and report price-only event counts."""
-    _require_de()
-    report = {"market": de_market.update_de_market(), "rates": de_market.update_de_rates()}
-    report["membership"] = de_membership.update_de_membership(refresh=refresh)
-    report["universe"] = de_universe.update_de_universe()
+    report = ingest_de(refresh=refresh)
     data = transform_de()
     report["transform"] = event_summary(data["events"])
     return report

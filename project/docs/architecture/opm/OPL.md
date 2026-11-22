@@ -388,7 +388,16 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   the pooled model (+0.021 AUC) is about 1.3 standard errors at n = 1,354 and does not show up on TEST; no variant gives
   a material German edge. Production for `de` stays German-only (simpler, same TEST quality) until a richer German
   signal (earnings, R7.5) is available; the pooled option remains reproducible with this module.
-- ⬜ **R7.4 Detecting German Breakouts** (remaining: German signal publishing and the daily German run) requires **membership_history (de)** and feeds **Transforming**. It is the
+- ✅ **R7.4g Running the German Day**: `run_pipeline` dispatches on **Market** (*de*: `update` = `de_pipeline.ingest_de` +
+  `transform_de`, `warehouse` = `load_from_warehouse_de`, `file` refused), then shares training, publishing, report,
+  housekeeping and notification; metrics and run log carry `market`. German **Signal Book** lists only tradable `.DE`
+  symbols (Hamburg-priced names stay in the event history). The regime explanation and the report's benchmark and
+  description follow the market. **Market** *de* is now *implemented*, so `DRIFTREV_MARKET=de` works for the pipeline, the
+  scheduler (18:30 Berlin) and the API. Live run 2026-11-22 (`--mode warehouse`): success; data through 2026-11-20;
+  2 German signals (LPKF, Jenoptik: shock crashes, both SKIP); regime *elevated* (DAX below its 200-day MA, realised-vol
+  term 1.29, breadth 33 %).
+- ✅ **R7.4 German events end to end** (R7.4a–g). Open: German earnings families need R7.5; a daily CD job for *de*
+  (SD7) is not set up yet. requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
   rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or
