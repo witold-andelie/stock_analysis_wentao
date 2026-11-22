@@ -215,7 +215,7 @@ def test_us_pipeline_path_unchanged(de_env, daily_stubs, monkeypatch):
 
 @pytest.mark.parametrize("code,description", [
     ("us", "Event-driven ML on the S&amp;P 1500 (earnings drift · crash reversal · momentum breakout)."),
-    ("de", "Event-driven ML on Xetra DAX + MDAX + SDAX (crash reversal · momentum breakout)."),
+    ("de", "Event-driven ML on Xetra DAX + MDAX + SDAX (earnings drift · crash reversal · momentum breakout)."),
 ])
 def test_report_labels_follow_market(de_env, monkeypatch, code, description):
     monkeypatch.setattr(config, "MARKET", config.MARKETS[code])

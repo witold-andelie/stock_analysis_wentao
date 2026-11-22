@@ -146,7 +146,7 @@ a{color:var(--accent)}
     kpis = [("Data through", m.get("data_through", "?")), ("Regime", reg.get("state", "?")),
             ("Signals today", len(sig)), ("Universe", m.get("universe_size", "?")),
             ("Best CAGR (test)", f"{best.get('name', '?')}: {_fmt('cagr', best.get('cagr'))}" if len(strat) else "–")]
-    description = ("Event-driven ML on Xetra DAX + MDAX + SDAX (crash reversal · momentum breakout)."
+    description = ("Event-driven ML on Xetra DAX + MDAX + SDAX (earnings drift · crash reversal · momentum breakout)."
                    if config.MARKET.code == "de" else
                    "Event-driven ML on the S&amp;P 1500 (earnings drift · crash reversal · momentum breakout).")
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
