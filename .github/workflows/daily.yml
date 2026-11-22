@@ -83,6 +83,7 @@ jobs:
       - name: Pipeline (incremental download -> transform -> score -> report -> housekeeping)
         id: pipe
         run: |
+          mkdir -p data   # first run (empty cache): tee needs the folder before the pipeline creates it
           python -m driftrev.pipeline --mode update ${{ steps.mode.outputs.flags }} | tee data/pipeline_result.json
           echo "data_through=$(python -c "import json;print(json.load(open('data/artifacts/metrics.json'))['data_through'])")" >> "$GITHUB_OUTPUT"
 

@@ -165,3 +165,12 @@ def test_daily_workflows_are_valid_yaml(name):
     workflow = yaml.safe_load(_wf(name))
     assert isinstance(workflow, dict)
     assert {"run", "deploy-pages"} <= workflow["jobs"].keys()
+
+
+def test_daily_workflows_create_data_dir_before_tee():
+    """First run on an empty cache: `tee data/...` fails under pipefail unless the folder exists (2026-11-22 incident)."""
+    for name, folder in (("daily.yml", "data"), ("daily_de.yml", "data/de")):
+        text = _wf(name)
+        tee = text.index("| tee ")
+        mk = text.rfind(f"mkdir -p {folder}", 0, tee)
+        assert mk != -1, f"{name}: mkdir -p {folder} must precede the tee of the pipeline output"
