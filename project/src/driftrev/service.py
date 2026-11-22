@@ -322,27 +322,28 @@ def runs(limit: int = 20) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------ broker
+def broker_for_market():
+    """US -> Alpaca, DE -> IBKR, by config.MARKET.code at call time."""
+    from . import broker, broker_ibkr, config
+
+    return broker_ibkr if config.MARKET.code == "de" else broker
+
+
 def _orders_allowed() -> bool:
     return os.environ.get("DRIFTREV_ALLOW_ORDERS", "").lower() == "true"
 
 
 def orders_preview(max_positions: int | None = None, capital: float | None = None) -> dict[str, Any]:
-    from . import broker
-
-    return broker.preview_orders(max_positions=max_positions or 5, capital=capital)
+    return broker_for_market().preview_orders(max_positions=max_positions or 5, capital=capital)
 
 
 def orders_submit(confirm: bool) -> dict[str, Any]:
-    from . import broker
-
     if confirm is not True:
         raise ServiceError(400, "Refused: set confirm=true to submit orders.")
     if not _orders_allowed():
         raise ServiceError(403, "Refused: order submission is disabled. Set DRIFTREV_ALLOW_ORDERS=true on the server.")
-    return broker.submit_orders(confirm=True)
+    return broker_for_market().submit_orders(confirm=True)
 
 
 def portfolio() -> dict[str, Any]:
-    from . import broker
-
-    return broker.account_summary()
+    return broker_for_market().account_summary()

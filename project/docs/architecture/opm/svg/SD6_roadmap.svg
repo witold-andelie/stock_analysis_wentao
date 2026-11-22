@@ -100,16 +100,16 @@
 <!-- r76 -->
 <g id="node26" class="node">
 <title>r76</title>
-<ellipse fill="#f2f2f2" stroke="black" stroke-dasharray="1,5" cx="637.59" cy="-237" rx="114.2" ry="29.52"/>
-<text xml:space="preserve" text-anchor="middle" x="637.59" y="-244.38" font-family="Helvetica,sans-Serif" font-size="10.00">R7.6 Trading on Xetra</text>
+<ellipse fill="#ead7ff" stroke="black" stroke-dasharray="5,2" cx="637.59" cy="-237" rx="146.55" ry="29.52"/>
+<text xml:space="preserve" text-anchor="middle" x="637.59" y="-244.38" font-family="Helvetica,sans-Serif" font-size="10.00">R7.6 Trading on Xetra (IBKR, offline&#45;tested)</text>
 <text xml:space="preserve" text-anchor="middle" x="637.59" y="-233.12" font-family="Helvetica,sans-Serif" font-size="10.00">(broker bridge for EUR orders,</text>
 <text xml:space="preserve" text-anchor="middle" x="637.59" y="-221.88" font-family="Helvetica,sans-Serif" font-size="10.00">paper default, same Order Guard)</text>
 </g>
 <!-- book&#45;&gt;r76 -->
 <g id="edge26" class="edge">
 <title>book&#45;&gt;r76</title>
-<path fill="none" stroke="black" d="M222.9,-36.28C265.23,-71.74 364.23,-150.14 460.28,-193 483.48,-203.35 509.52,-211.54 534.32,-217.91"/>
-<ellipse fill="none" stroke="black" cx="538.67" cy="-219" rx="4" ry="4"/>
+<path fill="none" stroke="black" d="M222.9,-36.28C265.23,-71.74 364.23,-150.14 460.28,-193 479.4,-201.53 500.45,-208.6 521.15,-214.38"/>
+<ellipse fill="none" stroke="black" cx="525.34" cy="-215.52" rx="4" ry="4"/>
 </g>
 <!-- r1 -->
 <g id="node9" class="node">
@@ -350,7 +350,7 @@
 <!-- r76&#45;&gt;serving -->
 <g id="edge28" class="edge">
 <title>r76&#45;&gt;serving</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M740.34,-223.7C766.08,-217.18 792.7,-207.47 814.9,-193 850.72,-169.65 839.46,-142.35 873.9,-117 891.4,-104.12 913.42,-94.84 933.11,-88.4"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M756.03,-219.34C776.67,-213.06 797.19,-204.54 814.9,-193 850.72,-169.65 839.46,-142.35 873.9,-117 891.4,-104.12 913.42,-94.84 933.11,-88.4"/>
 <polygon fill="black" stroke="black" points="934.1,-91.76 942.63,-85.47 932.04,-85.07 934.1,-91.76"/>
 </g>
 <!-- xetra -->
@@ -363,8 +363,8 @@
 <!-- xetra&#45;&gt;r76 -->
 <g id="edge27" class="edge">
 <title>xetra&#45;&gt;r76</title>
-<path fill="none" stroke="black" d="M257.17,-237C321.65,-237 429.94,-237 514.36,-237"/>
-<ellipse fill="none" stroke="black" cx="518.73" cy="-237" rx="4" ry="4"/>
+<path fill="none" stroke="black" d="M257.17,-237C313.62,-237 403.66,-237 481.87,-237"/>
+<ellipse fill="none" stroke="black" cx="486.35" cy="-237" rx="4" ry="4"/>
 </g>
 <!-- srcs -->
 <g id="node28" class="node">

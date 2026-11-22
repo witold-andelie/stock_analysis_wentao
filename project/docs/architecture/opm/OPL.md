@@ -394,5 +394,13 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   session mapping must be checked against prices. No free, documented bulk archive of ad-hoc notices was found
   (EQS publishes per-issuer IR feeds only), so ad-hoc causes for *shock_crash* stay ⬜ until a source exists; German
   crashes can still be detected from prices, without a cause taxonomy.
-- ⬜ **R7.6 Trading on Xetra** requires **Signal Book** and **Deutsche Börse Xetra** and feeds **Serving**: a broker
-  bridge that can route EUR orders to Xetra (Alpaca is US-only), paper by default, behind the same **Order Guard**. [OPS]
+- 🟡 **R7.6 Trading on Xetra** (`driftrev.broker_ibkr`; owner decision: Interactive Brokers, `ib_async==2.1.0`, imported
+  lazily) requires **Signal Book**, **Deutsche Börse Xetra** (IB exchange `IBIS`, EUR) and a running TWS / IB Gateway, and
+  feeds **Serving**: `service.broker_for_market()` routes *us* → Alpaca, *de* → IBKR. Same public API and **Order Guard**
+  as Alpaca, plus: no connection unless `IBKR_ENABLED=true`; paper by default and then only a `DU…` account is accepted.
+  Orders: hand-built bracket = DAY market BUY parent (submitted after the close, it executes at the next Xetra open) +
+  GTC take-profit limit + GTC stop, all tagged `orderRef=driftrev-<SYMBOL>-<yyyymmdd>` for idempotency. Expiry closing
+  is long-only, idempotent per day, and cancels the bracket exits before the SELL (a cancel error blocks the SELL).
+  Tested offline with a fake IB only. **To verify in a paper account before any real use:** IBIS contract qualification
+  and permissions, after-close DAY parent handling, bracket acceptance after disconnect, GTC child activation and sibling
+  cancellation, and the cancel-acknowledgement race before the expiry SELL. [OPS]
