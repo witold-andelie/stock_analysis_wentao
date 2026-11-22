@@ -114,8 +114,12 @@ def _avg_pairwise_corr(rets: pd.DataFrame, window: int) -> pd.Series:
 # 2. Per-ticker features
 # --------------------------------------------------------------------------------------
 def ticker_features(g: pd.DataFrame, ctx: pd.DataFrame, sector_etf: str | None,
-                    strength: pd.Series | None = None) -> pd.DataFrame:
+                    strength: pd.Series | None = None, *, min_dollar_volume: float | None = None,
+                    breakout_min_median_turnover: float | None = None) -> pd.DataFrame:
     """g: one ticker's OHLCV rows sorted by date. Returns g with feature + target columns."""
+    min_dollar_volume = S.event.min_dollar_volume if min_dollar_volume is None else min_dollar_volume
+    breakout_min_median_turnover = (rw.MIN_MEDIAN_DOLLAR_VOL if breakout_min_median_turnover is None
+                                    else breakout_min_median_turnover)
     g = g.sort_values("date").reset_index(drop=True)
     o, h, l, c, v = (g[k].astype(float) for k in ("open", "high", "low", "close", "volume"))
     div = g["dividends"].fillna(0).astype(float)
@@ -171,10 +175,10 @@ def ticker_features(g: pd.DataFrame, ctx: pd.DataFrame, sector_etf: str | None,
     bench = m["spy_close"].astype(float)
     f = pd.concat([f, rw.window_features(c, bench), rw.setup_features(o, h, l, c, v)], axis=1)
     f["rw_prior_strength"] = strength.reindex(g["date"]).to_numpy() if strength is not None else np.nan
-    f = pd.concat([f, rw.arm_flags(f)], axis=1)
+    f = pd.concat([f, rw.arm_flags(f, min_median_turnover=breakout_min_median_turnover)], axis=1)
 
     ev = S.event
-    liquid = (c >= ev.min_price) & (f["dollar_vol_20"] >= ev.min_dollar_volume)
+    liquid = (c >= ev.min_price) & (f["dollar_vol_20"] >= min_dollar_volume)
     f["is_liquid"] = liquid
     f["is_crash"] = (ret <= ev.max_ret_1d) & (f["volume_mult"] >= ev.min_volume_mult) & liquid
     f["n_crash_prior_252"] = f["is_crash"].astype(float).rolling(252, min_periods=1).sum().shift(1)
@@ -372,7 +376,8 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
               restrict_events: bool | None = None,
               filing_text: pd.DataFrame | None = None, *,
               ctx: pd.DataFrame | None = None, cap_buckets: dict[str, str] | None = None,
-              liquid_by_membership: Iterable[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+              liquid_by_membership: Iterable[str] | None = None, min_dollar_volume: float | None = None,
+              breakout_min_median_turnover: float | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Returns (events, daily_panel, market_ctx_with_regime).
 
     membership: R1 membership_history -> point-in-time `in_index`; with `restrict_events` (default
@@ -388,7 +393,10 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
     close_w = px.pivot_table(index="date", columns="ticker", values="close").sort_index()
     dv_w = (px.assign(dv=px["close"] * px["volume"]).pivot_table(index="date", columns="ticker", values="dv")
             .sort_index().shift(1).rolling(20, min_periods=20).median())
-    strength_w = rw.prior_strength(close_w, dv_w, ctx["spy_close"].reindex(close_w.index))
+    strength_w = rw.prior_strength(
+        close_w, dv_w, ctx["spy_close"].reindex(close_w.index),
+        min_median_turnover=(rw.MIN_MEDIAN_DOLLAR_VOL if breakout_min_median_turnover is None
+                             else breakout_min_median_turnover))
     del close_w, dv_w
     panels, events = [], []
     tickers = sorted(set(px["ticker"]) & set(meta.index))
@@ -396,7 +404,9 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
         if len(g) < 260:
             continue
         row = meta.loc[tkr]
-        f = ticker_features(g, ctx, row.get("sector_etf"), strength_w[tkr] if tkr in strength_w else None)
+        f = ticker_features(g, ctx, row.get("sector_etf"), strength_w[tkr] if tkr in strength_w else None,
+                            min_dollar_volume=min_dollar_volume,
+                            breakout_min_median_turnover=breakout_min_median_turnover)
         cik = row.get("cik")
         earn = earnings_days(filings, int(cik), f["date"].values) if pd.notna(cik) and not filings.empty else pd.DataFrame(columns=["date", "earn_accepted_et"])
         f = f.merge(earn, on="date", how="left")

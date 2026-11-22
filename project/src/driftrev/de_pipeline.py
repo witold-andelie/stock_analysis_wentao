@@ -46,7 +46,9 @@ def transform_de(save: bool = True) -> dict[str, pd.DataFrame]:
         uni, px, market, macro_wide, filings=pd.DataFrame(), sue=pd.DataFrame(), pageviews=pd.DataFrame(),
         membership=membership, consensus_eps=None, filing_text=None, ctx=ctx,
         cap_buckets=dict(config.MARKETS["de"].cap_bucket_by_index),
-        liquid_by_membership=uni.loc[uni["price_source"].ne("xetra"), "ticker"])
+        liquid_by_membership=uni.loc[uni["price_source"].ne("xetra"), "ticker"],
+        min_dollar_volume=config.MARKETS["de"].min_dollar_volume,
+        breakout_min_median_turnover=config.MARKETS["de"].breakout_min_median_turnover)
     ctx = ctx.rename_axis("date").reset_index()
     if save:
         store.replace_table("events", ev)

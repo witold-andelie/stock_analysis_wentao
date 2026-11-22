@@ -90,19 +90,20 @@ def setup_features(o: pd.Series, h: pd.Series, l: pd.Series, c: pd.Series, v: pd
 
 
 def prior_strength(close_wide: pd.DataFrame, dollar_med_wide: pd.DataFrame, spy: pd.Series,
-                   lookback: int = 20, memory: int = 10) -> pd.DataFrame:
+                   lookback: int = 20, memory: int = 10,
+                   min_median_turnover: float = MIN_MEDIAN_DOLLAR_VOL) -> pd.DataFrame:
     """Cross-sectional percentile of D(t, 20) among liquid names, then the max over the
     previous `memory` sessions (t-memory .. t-1): "was this stock top-decile recently?"."""
     rel = 100 * (close_wide / close_wide.shift(lookback)).sub(spy / spy.shift(lookback), axis=0)
-    rel = rel.where(dollar_med_wide >= MIN_MEDIAN_DOLLAR_VOL)
+    rel = rel.where(dollar_med_wide >= min_median_turnover)
     rank = rel.rank(axis=1, pct=True)
     return rank.shift(1).rolling(memory, min_periods=1).max()
 
 
-def arm_flags(f: pd.DataFrame) -> pd.DataFrame:
+def arm_flags(f: pd.DataFrame, min_median_turnover: float = MIN_MEDIAN_DOLLAR_VOL) -> pd.DataFrame:
     """Guide Section 9.1 arms. A: base momentum breakout. B: + consolidation & confirmation.
     C: + positive flat-path window release. (D: regulatory events - not applicable in the US.)"""
-    liquid = f["rw_median_dollar_vol"] >= MIN_MEDIAN_DOLLAR_VOL
+    liquid = f["rw_median_dollar_vol"] >= min_median_turnover
     strong = (f["rw_prior_strength"] >= TOP_DECILE) & (f["growth_20d"] > 1)
     arm_a = liquid & strong & (f["rw_breakout_5d"] == 1)
     consolidation = f["rw_days_since_high"].between(PAUSE_MIN, PAUSE_MAX) & (f["rw_pullback_atr"] < MAX_PULLBACK_ATR)

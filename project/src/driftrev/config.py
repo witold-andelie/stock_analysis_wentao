@@ -39,6 +39,8 @@ class Market:
     cap_bucket_by_index: tuple[tuple[str, str], ...]
     benchmarks: tuple[tuple[str, str], ...]
     cost_bps_one_way: tuple[tuple[str, float], ...]
+    min_dollar_volume: float                     # 20-session average turnover in market currency
+    breakout_min_median_turnover: float          # 20-session median turnover for breakout ranking
     data_subdir: str
     implemented: bool
 
@@ -64,6 +66,8 @@ MARKETS: dict[str, Market] = {
         cap_bucket_by_index=(("sp500", "large"), ("sp400", "mid"), ("sp600", "small")),
         benchmarks=(("SPY", "spy"), ("IWM", "iwm"), ("MDY", "mdy")),
         cost_bps_one_way=(("large", 8.0), ("mid", 15.0), ("small", 25.0)),
+        min_dollar_volume=2e6,
+        breakout_min_median_turnover=10e6,
         data_subdir="",
         implemented=True,
     ),
@@ -79,6 +83,9 @@ MARKETS: dict[str, Market] = {
         benchmarks=(("^GDAXI", "dax"), ("^MDAXI", "mdax"), ("^SDAXI", "sdax")),
         # ASSUMPTION (R7.1): Xetra event-day spreads; revisit in R7.4
         cost_bps_one_way=(("large", 10.0), ("mid", 20.0), ("small", 35.0)),
+        # R7.4c owner decision (EUR 1m); breakout floor keeps the US 5:1 ratio (ASSUMPTION)
+        min_dollar_volume=1e6,
+        breakout_min_median_turnover=5e6,
         data_subdir="de",
         implemented=False,
     ),

@@ -357,8 +357,13 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   breakouts, 524 crashes; large 3,124 / mid 2,971 / small 350). 🟡 Small caps are under-represented: SDAX member days
   have a median 20-day turnover of about EUR 1.6m, below the shared `EventRule.min_dollar_volume` of 2m, so 58% of them
   fail the liquidity gate; plus the SDAX history gap of R7.2a (38 of ~50 members reconstructed for 2014).
+- ✅ **R7.4c Market-specific Liquidity Floors**: **Market** exhibits `min_dollar_volume` (event gate, 20-session average
+  turnover; US USD 2m, DE EUR 1m — owner decision 2026-11-22) and `breakout_min_median_turnover` (rolling-window ranking
+  and arm A; US 10m, DE EUR 5m keeping the US 5:1 ratio — ASSUMPTION). `build_all` / `ticker_features` /
+  `rolling_window.prior_strength` / `arm_flags` take them as parameters (defaults = the US values); `transform_de`
+  passes the German ones. Live: 7,993 German events (breakouts 7,394, crashes 581; large 2,809 / mid 4,217 / small 967).
 - ⬜ **R7.4 Detecting German Breakouts** (remaining: research on the German events — pooled with US or separate,
-  decided on VALIDATION — and a market-specific liquidity floor) requires **membership_history (de)** and feeds **Transforming**. It is the
+  decided on VALIDATION) requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
   rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or
