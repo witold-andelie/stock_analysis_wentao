@@ -158,6 +158,11 @@ FRED_SERIES = {
     "DGS10": "dgs10", "DGS5": "dgs5", "DGS2": "dgs2", "DFF": "fedfunds",
     "BAA10Y": "credit_spread", "T10Y2Y": "t10y2y",
 }
+# R7.3 German rates: Bundesbank time-series API (flow/key -> short name). CSV, no key needed.
+BUNDESBANK_API = "https://api.statistiken.bundesbank.de/rest/data"
+DE_RATE_SERIES = {
+    "BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A": "bund10y",   # 10y Bund yield, daily, %
+}
 
 
 @dataclass(frozen=True)
@@ -277,6 +282,15 @@ class Regime:
 
 
 @dataclass(frozen=True)
+class RealisedVol:
+    """R7.3 volatility gauge for markets without a served implied-vol index (Xetra: no VDAX on Yahoo)."""
+
+    short_window: int = 20            # sessions; VIX analogue
+    long_window: int = 60             # sessions; VIX3M analogue
+    periods_per_year: int = 252
+
+
+@dataclass(frozen=True)
 class Retention:
     """How long each class of local data file lives (housekeeping.py, SD7). Days unless noted.
     Raw tables in the warehouse are never pruned: the full history is the research dataset."""
@@ -335,6 +349,7 @@ class Settings:
     membership: Membership = field(default_factory=Membership)
     correction: Correction = field(default_factory=Correction)
     consensus: Consensus = field(default_factory=Consensus)
+    realised_vol: RealisedVol = field(default_factory=RealisedVol)
     random_state: int = 42
 
 

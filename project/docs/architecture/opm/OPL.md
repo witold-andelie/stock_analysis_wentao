@@ -306,12 +306,18 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   history page; SDAX moves are partly visible in the MDAX table (names going up or down). 🟡 so SDAX keeps a survivorship
   gap, like the S&P 600 before 2019-12. Yahoo has no prices for delisted names (Wirecard `WDI.DE`, Osram `OSR.DE`
   returned empty). Wikimedia rate-limits bursts (HTTP 429): use the REST page endpoint, a cache and pauses.
-- ⬜ **R7.3 Loading German Market Series** requires **Public Sources (de)** and feeds **Acquiring**: DAX, MDAX and
+- ✅ **R7.3 Loading German Market Series** (`driftrev.de_market`, `python -m driftrev.de_market` with `DRIFTREV_MARKET=de`;
+  refuses any other market) requires **Public Sources (de)** and feeds **Acquiring**: DAX, MDAX and
   SDAX index levels as benchmarks for D(t,L), a volatility gauge and Bund yields for the regime monitor. [ING]
   *Source check 2026-11-22:* Yahoo serves `^GDAXI`, `^MDAXI`, `^SDAXI`, `^TECDAX`, `^STOXX50E` and the iShares DAX ETF
   `EXS1.DE` daily from 2014. VDAX-NEW and VSTOXX are **not** served (`^V1X`, `V1X.DE`, `^VDAX`, `^V2TX` empty), so the
   volatility gauge is a realised-volatility proxy. The daily 10-year Bund yield comes from the Bundesbank time-series
   API (`BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A`, CSV, 2014 → today); FRED only has it monthly.
+  Implementation: index levels go to the *de* warehouse table **market** (same loader as US prices), Bund yields to
+  **macro** as series `bund10y` (re-pulled 60 days back, like FRED). The volatility gauge is
+  `indicators.realised_vol` (annualised 20-session close-to-close vol, VIX scale) and `realised_vol_term`
+  (20/60 ratio, the VIX/VIX3M analogue), windows in `config.RealisedVol`. Both are point-in-time and tested; they
+  are wired into a German **Market Context** in R7.4. Nothing in `pipeline.py` calls this module yet.
 - ⬜ **R7.4 Detecting German Breakouts** requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation

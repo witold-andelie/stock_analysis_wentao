@@ -40,7 +40,7 @@ digraph SD6 {
     r71 [shape=ellipse, style=filled, fillcolor="#ead7ff", label="R7.1 Selecting Market ✓\n(config.Market + DRIFTREV_MARKET;\nUS default unchanged, de refused)"];
     r72 [shape=ellipse, label="R7.2 Loading German Index Membership\n(DAX/MDAX/SDAX constituents + change\ntables; ISIN key; Yahoo .DE tickers)"];
     r72o [shape=box, label="membership_history (de)\n(ticker, isin, index, start, end)"];
-    r73 [shape=ellipse, label="R7.3 Loading German Market Series\n(DAX/MDAX/SDAX indices, VDAX or\nrealised-vol proxy, Bund yields)"];
+    r73 [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.3 Loading German Market Series ✓\n(driftrev.de_market: DAX/MDAX/SDAX levels,\nBundesbank 10y Bund; realised-vol proxy)"];
     r74 [shape=ellipse, label="R7.4 Detecting German Breakouts\n(price-only family first:\nrolling-window Variant B, EUR liquidity)"];
     r75 [shape=ellipse, label="R7.5 Dating German Releases\n(earnings dates + MAR Art. 17 ad-hoc\nnotices as the 8-K analogue)"];
     r76 [shape=ellipse, label="R7.6 Trading on Xetra\n(broker bridge for EUR orders,\npaper default, same Order Guard)"];

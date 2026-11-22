@@ -97,3 +97,19 @@ def rolling_beta(r: pd.Series, m: pd.Series, n: int = 252, min_periods: int = 12
     cov = r.rolling(n, min_periods=min_periods).cov(m)
     var = m.rolling(n, min_periods=min_periods).var()
     return cov / var.replace(0, np.nan)
+
+
+def realised_vol(close: pd.Series, n: int = 20, periods_per_year: int = 252) -> pd.Series:
+    """Annualised close-to-close volatility in percent points on the VIX scale.
+
+    Uses the sample standard deviation (ddof=1) of the last n log returns,
+    with no look-ahead and NaN until n returns exist.
+    """
+    log_returns = np.log(close / close.shift(1))
+    return 100 * np.sqrt(periods_per_year) * log_returns.rolling(n, min_periods=n).std(ddof=1)
+
+
+def realised_vol_term(close: pd.Series, short: int = 20, long: int = 60,
+                      periods_per_year: int = 252) -> pd.Series:
+    """Short / long realised volatility: the VIX/VIX3M ratio analogue (> 1 = stress)."""
+    return realised_vol(close, short, periods_per_year) / realised_vol(close, long, periods_per_year)
