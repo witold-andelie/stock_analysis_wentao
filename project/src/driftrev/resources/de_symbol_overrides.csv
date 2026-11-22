@@ -1,0 +1,10 @@
+company_key,symbol,evidence
+DHL AG,DHL.DE,"Search fixture (R7.2b): query DHL AG returns GER DHL.DE, longname Deutsche Post AG, shortname DHL AG with share-class suffix; strict name rule cannot match"
+BMW,BMW.DE,"Search fixture: query BMW returns GER BMW.DE Bayerische Motoren Werke Aktiengesellschaft (BMW = its abbreviation); prices 2014-01-02.. on Yahoo"
+Münchener Rück,MUV2.DE,"Search fixture: query Muenchener Rueck returns GER MUV2.DE Münchener Rückversicherungs-Gesellschaft Aktiengesellschaft in München"
+Porsche,P911.DE,"Search fixture: query Porsche AG returns GER P911.DE Dr. Ing. h.c. F. Porsche AG (distinct from PAH3.DE); prices from 2022-09-30 IPO"
+Cewe Group,CWC.DE,"Coordinator: Yahoo search empty; CWC.DE (CEWE Stiftung) has prices 2014-01-02..2026-11-20 (probe 2026-11-22)"
+Douglas Group,DOU.DE,"Coordinator: Yahoo search empty; DOU.DE has prices from the 2024-03-21 IPO (probe 2026-11-22)"
+K+S,SDF.DE,"Coordinator: Yahoo search empty for K+S; SDF.DE has prices 2014-01-02..2026-11-20 (probe 2026-11-22)"
+Telefónica Deutschland Holding,O2D.HM,"Coordinator: delisted from Xetra 2024; O2D.HM (Hamburg) has prices 2014-01-02.. (probe 2026-11-22); thin volume"
+Vitesco Technologies,VTSC.HA,"Coordinator: delisted 2024; VTSC.HA (Hannover) has prices 2021-09-17.. (probe 2026-11-22); thin volume"

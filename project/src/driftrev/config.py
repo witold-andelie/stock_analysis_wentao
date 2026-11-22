@@ -341,6 +341,15 @@ class DeMembership:
 
 
 @dataclass(frozen=True)
+class DeUniverse:
+    """R7.2b German symbol resolution (de_universe.py)."""
+
+    search_rps: float = 0.8           # Yahoo search politeness (about one request per 1.25 s)
+    search_max_results: int = 10
+    exchanges: tuple = ("GER", "HAM")  # preference order: Xetra, then Hamburg (delisted names)
+
+
+@dataclass(frozen=True)
 class Correction:
     threshold: float = 0.05           # SPY >= 5% below its running all-time high = correction (HW1 Q3)
 
@@ -370,6 +379,7 @@ class Settings:
     consensus: Consensus = field(default_factory=Consensus)
     realised_vol: RealisedVol = field(default_factory=RealisedVol)
     de_membership: DeMembership = field(default_factory=DeMembership)
+    de_universe: DeUniverse = field(default_factory=DeUniverse)
     random_state: int = 42
 
 

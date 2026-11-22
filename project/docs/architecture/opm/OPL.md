@@ -295,7 +295,7 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   uses `DATA_ROOT/de`, so each market has one DuckDB writer). **Scheduling** uses the active market's timezone and run
   time. **Running Pipeline** and **Scheduling** require an *implemented* **Market**: until R7.2 lands, *de* is refused
   with `MarketNotImplementedError` before any file is written (`tests/test_market.py`). [OPS/ING]
-- 🟡 **R7.2 Loading German Index Membership** (R7.2a ✅ membership reconstruction; R7.2b ⬜ symbols, ISIN, prices) requires **Public Sources (de)** (DAX / MDAX / SDAX constituent
+- 🟡 **R7.2 Loading German Index Membership** (R7.2a ✅ membership; R7.2b ✅ symbols and prices; ISIN not stored) requires **Public Sources (de)** (DAX / MDAX / SDAX constituent
   pages and their change history) and yields **membership_history (de)** (ticker, ISIN, index, start, end), which
   **universe** requires. ISIN replaces the SEC CIK as the stable key; Yahoo serves Xetra prices as `<symbol>.DE`.
   The September 2021 index reform (DAX 30 → 40, MDAX 60 → 50) must be reconstructed. If history cannot be
@@ -316,8 +316,16 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
     non-current names are dropped and reported as orphans). On the 2026-11-22 fixtures: 625 intervals; on 2026-11-20
     exactly 40 / 50 / 70 members; one DAX/MDAX orphan left (Victoria, 2001); 62 SDAX orphans = names that left SDAX
     for no other index (exit date unknown) — R7.2b closes them at the last Xetra trading day.
-  - ⬜ **R7.2b Resolving German Symbols and Prices** requires **membership_history (de)** and **Yahoo Finance** (search),
-    and yields **universe (de)** (company_key → Xetra `.DE` symbol, ISIN) and **prices (de)**. Source check
+  - ✅ **R7.2b Resolving German Symbols and Prices** (`driftrev.de_universe.update_de_universe()`) requires
+    **membership_history (de)** and **Yahoo Finance** (search, cached) and yields **universe (de)** (company_key, symbol,
+    exchange, `price_source` xetra | hamburg | other, `resolved_by` search | override | unresolved, latest index and cap
+    bucket, first/last membership date) and **prices (de)**. A Yahoo listing is accepted only if every token of its
+    long or short name (legal forms removed) prefixes a token of the company's names; Xetra beats Hamburg. This rejects
+    real look-alikes in the data (`Osram` → ams-OSRAM `DQW.DE`, `Siemens` → Siemens Energy, `Porsche AG` → `PAH3.DE`).
+    Evidenced manual rows live in `resources/de_symbol_overrides.csv`. Live run 2026-11-22: 201 companies since 2014,
+    180 resolved (163 Xetra by search, 8 Hamburg by search, 9 overrides), all 160 current members on Xetra, 517,588 price
+    rows. 🟡 21 delisted names have no Yahoo prices on any German venue (e.g. Axel Springer, Kuka, Innogy, Stada,
+    Morphosys): a remaining survivorship gap. ISIN is not stored (not needed by any consumer yet). Source check
     2026-11-22: Yahoo search finds most names (umlauts need `ae/oe/ue` spelling, e.g. Stroeer → `SAX.DE`; legal form
     helps, `1&1 AG` → `1U1.DE`); delisted names missing on Xetra still have Hamburg prices (`WDI.HM`, `OSR.HM`,
     `RKET.HM` from 2014) with tiny volume, so they need a price-source flag and must not drive the liquidity filter.

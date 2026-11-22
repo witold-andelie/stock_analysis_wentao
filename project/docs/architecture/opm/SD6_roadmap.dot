@@ -39,7 +39,7 @@ digraph SD6 {
     market   [shape=box, style=filled, fillcolor="#e6e6e6", label="Market\n(us | de: MIC, timezone, run time,\ncurrency, benchmarks, cost model,\nindex set, data dir)"];
     r71 [shape=ellipse, style=filled, fillcolor="#ead7ff", label="R7.1 Selecting Market ✓\n(config.Market + DRIFTREV_MARKET;\nUS default unchanged, de refused)"];
     r72 [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.2a Reconstructing German Membership ✓\n(driftrev.de_membership: change grids,\nredirect + alias identity, SDAX via MDAX markers)"];
-    r72b [shape=ellipse, label="R7.2b Resolving German Symbols & Prices\n(Yahoo search → .DE symbol, ISIN;\nHamburg prices for delisted names)"];
+    r72b [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.2b Resolving German Symbols & Prices ✓\n(Yahoo search → .DE symbol, ISIN;\nHamburg prices for delisted names)"];
     r72o [shape=box, label="membership_history (de)\n(ticker, isin, index, start, end)"];
     r73 [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.3 Loading German Market Series ✓\n(driftrev.de_market: DAX/MDAX/SDAX levels,\nBundesbank 10y Bund; realised-vol proxy)"];
     r74a [shape=ellipse, style=filled, fillcolor="#e6e6e6", label="R7.4a Building German Market Context ✓\n(de_context: spy_*=DAX, iwm_*=SDAX,\nvix=DAX realised vol, Bund lagged)"];
