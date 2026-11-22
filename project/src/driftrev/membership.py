@@ -179,17 +179,18 @@ def merged_intervals(membership: pd.DataFrame, gap_days: int | None = None) -> d
     return res
 
 
-def bucket_intervals(membership: pd.DataFrame) -> dict[str, list[tuple[np.datetime64, np.datetime64, str]]]:
+def bucket_intervals(membership: pd.DataFrame, cap_buckets: dict[str, str] | None = None) -> dict[str, list[tuple[np.datetime64, np.datetime64, str]]]:
     """Per ticker: [start, end) intervals tagged with the cap bucket of the index it sat in (NaT end -> +inf).
     Overlapping rows (an index migration 400 -> 500 on the same day) are resolved to the LARGER bucket."""
     far = pd.Timestamp("2262-01-01")
     res: dict[str, list] = {}
     if membership is None or membership.empty:
         return res
+    cap_buckets = cap_buckets or CAP_BUCKET
     m = membership.assign(end_date=membership["end_date"].fillna(far))
-    m = m[m["index_name"].isin(CAP_BUCKET)].sort_values(["ticker", "start_date"])
+    m = m[m["index_name"].isin(cap_buckets)].sort_values(["ticker", "start_date"])
     for tkr, g in m.groupby("ticker"):
-        res[tkr] = [(np.datetime64(s), np.datetime64(e), CAP_BUCKET[i])
+        res[tkr] = [(np.datetime64(s), np.datetime64(e), cap_buckets[i])
                     for s, e, i in zip(g["start_date"], g["end_date"], g["index_name"])]
     return res
 

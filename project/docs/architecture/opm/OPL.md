@@ -347,7 +347,18 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   gauge (DAX realised volatility, 20/60 sessions). Every column of the US **Market Context** exists (US-only concepts:
   sector correlation and FRED rates, as NaN), plus `bund10y` (lagged one session), `bund10y_chg_20d`, `mdax_ret_20d`,
   `mid_vs_large_20d`, `rv_20`, `rv_term`. `features.regime_table` runs on it unchanged. [TRF]
-- ⬜ **R7.4 Detecting German Breakouts** requires **membership_history (de)** and feeds **Transforming**. It is the
+- ✅ **R7.4b Building the German Event Dataset** (`driftrev.de_pipeline.transform_de`, `run_de`; `python -m
+  driftrev.de_pipeline`) runs the *de* warehouse through the **same** `features.build_all` as the US, with three
+  backward-compatible parameters (`ctx` = the R7.4a context, `cap_buckets` = dax/mdax/sdax → large/mid/small,
+  `liquid_by_membership` = symbols priced on a regional venue, whose liquidity comes from index membership instead of
+  their unrepresentative volume) and yields **Event Dataset**, **Daily Panel** and **Market Context** (with regime) in
+  the *de* warehouse. Without filings, events get `edgar_category = "none"`. Families: *shock_crash* and
+  *momentum_breakout* only (earnings need R7.5). Live run 2026-11-22: 6,445 events 2014-02-06..2026-11-20 (5,921
+  breakouts, 524 crashes; large 3,124 / mid 2,971 / small 350). 🟡 Small caps are under-represented: SDAX member days
+  have a median 20-day turnover of about EUR 1.6m, below the shared `EventRule.min_dollar_volume` of 2m, so 58% of them
+  fail the liquidity gate; plus the SDAX history gap of R7.2a (38 of ~50 members reconstructed for 2014).
+- ⬜ **R7.4 Detecting German Breakouts** (remaining: research on the German events — pooled with US or separate,
+  decided on VALIDATION — and a market-specific liquidity floor) requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
   rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or

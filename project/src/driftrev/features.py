@@ -19,6 +19,7 @@ next morning's 09:00 ET, because trades are entered at the next open). Targets u
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
@@ -369,7 +370,9 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
               filings: pd.DataFrame, sue: pd.DataFrame, pageviews: pd.DataFrame,
               membership: pd.DataFrame | None = None, consensus_eps: pd.DataFrame | None = None,
               restrict_events: bool | None = None,
-              filing_text: pd.DataFrame | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+              filing_text: pd.DataFrame | None = None, *,
+              ctx: pd.DataFrame | None = None, cap_buckets: dict[str, str] | None = None,
+              liquid_by_membership: Iterable[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Returns (events, daily_panel, market_ctx_with_regime).
 
     membership: R1 membership_history -> point-in-time `in_index`; with `restrict_events` (default
@@ -377,8 +380,9 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
     With no membership table every row counts as a member (old behaviour)."""
     restrict = config.SETTINGS.membership.restrict_events if restrict_events is None else restrict_events
     intervals = mbr.merged_intervals(membership) if membership is not None and len(membership) else None
-    buckets = mbr.bucket_intervals(membership) if intervals is not None else {}
-    ctx = market_context(market, macro_wide)
+    buckets = mbr.bucket_intervals(membership, cap_buckets) if intervals is not None else {}
+    ctx = market_context(market, macro_wide) if ctx is None else ctx.copy()
+    membership_liquid = set(liquid_by_membership) if liquid_by_membership is not None else set()
     meta = uni.set_index("ticker")
     # cross-sectional prior strength (guide: top decile of 20d benchmark-relative return)
     close_w = px.pivot_table(index="date", columns="ticker", values="close").sort_index()
@@ -399,6 +403,13 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
         f["is_earnings"] = f["earn_accepted_et"].notna()
         # point-in-time membership: a ticker without any interval row is treated as never a member
         f["in_index"] = mbr.in_index_mask(f["date"], intervals.get(tkr, []) if intervals is not None else None)
+        if tkr in membership_liquid:
+            # Delisted names priced on a regional venue have unrepresentative volume;
+            # index membership implies Xetra liquidity.
+            f["is_liquid"] = (f["close"] >= S.event.min_price) & f["in_index"]
+            f["is_crash"] = ((f["ret_1d"] <= S.event.max_ret_1d)
+                             & (f["volume_mult"] >= S.event.min_volume_mult) & f["is_liquid"])
+            f["n_crash_prior_252"] = f["is_crash"].astype(float).rolling(252, min_periods=1).sum().shift(1)
         if tkr in buckets:               # point-in-time cap bucket (the universe table only knows today's index)
             f["cap_bucket_pit"] = mbr.cap_bucket_at(f["date"], buckets[tkr])
         panels.append(f[PANEL_COLS].astype({c: "float32" for c in PANEL_COLS[2:15]}))
@@ -447,6 +458,9 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
         if filing_text is not None and not filing_text.empty:
             from . import filing_text as ft
             ev = ev.join(ft.attach_filing_text(ev.assign(cik=ev["cik"].astype("Int64")), filing_text, filings))
+    else:
+        ev["edgar_category"] = "none"
+        ev["edgar_items"] = ""
     att = attention_features(pageviews)
     if not att.empty:
         ev = ev.merge(att, on=["wikipedia_title", "date"], how="left")

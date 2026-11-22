@@ -42,6 +42,7 @@ digraph SD6 {
     r72b [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.2b Resolving German Symbols & Prices ✓\n(Yahoo search → .DE symbol, ISIN;\nHamburg prices for delisted names)"];
     r72o [shape=box, label="membership_history (de)\n(ticker, isin, index, start, end)"];
     r73 [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.3 Loading German Market Series ✓\n(driftrev.de_market: DAX/MDAX/SDAX levels,\nBundesbank 10y Bund; realised-vol proxy)"];
+    r74b [shape=ellipse, style=filled, fillcolor="#fff3b0", label="R7.4b German Event Dataset ✓\n(de_pipeline: shared build_all,\ncrash + breakout, 6,445 events)"];
     r74a [shape=ellipse, style=filled, fillcolor="#e6e6e6", label="R7.4a Building German Market Context ✓\n(de_context: spy_*=DAX, iwm_*=SDAX,\nvix=DAX realised vol, Bund lagged)"];
     r74 [shape=ellipse, label="R7.4 Detecting German Breakouts\n(price-only family first:\nrolling-window Variant B, EUR liquidity)"];
     r75 [shape=ellipse, label="R7.5 Dating German Releases\n(earnings dates + MAR Art. 17 ad-hoc\nnotices as the 8-K analogue)"];
@@ -54,7 +55,7 @@ digraph SD6 {
   market -> acquiring [arrowhead=odot]; market -> signalling [arrowhead=odot];
   srcs -> r72 [arrowhead=odot]; r72 -> r72o; r72o -> r72b [arrowhead=odot]; r72b -> universe [dir=both];
   srcs -> r73 [arrowhead=odot]; r73 -> acquiring [style=dashed];
-  r72o -> r74 [arrowhead=odot]; r74 -> transforming [style=dashed]; r74a -> r74 [style=dashed];
+  r72o -> r74 [arrowhead=odot]; r74 -> transforming [style=dashed]; r74a -> r74b [style=dashed]; r74b -> r74 [style=dashed];
   srcs -> r75 [arrowhead=odot]; r75 -> transforming [style=dashed];
   book -> r76 [arrowhead=odot]; xetra -> r76 [arrowhead=odot]; r76 -> serving [style=dashed];
 }
