@@ -1,4 +1,5 @@
 data/
+pages/
 .venv/
 .env
 __pycache__/

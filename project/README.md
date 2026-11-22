@@ -573,7 +573,8 @@ TEST is reported only and never used to choose models or book rules.
 | Book rules | US VALIDATION decisions | no family or category exclusions; German VALIDATION keeps all families |
 | Broker | Alpaca | Interactive Brokers, IBIS exchange, EUR |
 
-The scheduler and daily pipeline support Germany. A German daily CD job is not set up yet.
+The scheduler and daily pipeline support Germany. The GitHub Actions workflow `daily_de.yml` runs it after the
+Xetra close (17:30 UTC, Monday to Friday; Sunday retrain). The results site shows the US at the root and Germany under `/de/`.
 
 **Results (honest).** These runs were recorded on 2026-11-22. AUCs below are measured on German events.
 The price-event walk-forward uses yearly refits from 2018; its OOS period is 2024-01-02 → 2026-11-20.

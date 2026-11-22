@@ -1,0 +1,151 @@
+# OPM SD7 · Delivering (CD): German incremental update -> signals -> shared results site.
+# Data never enters git: the warehouse lives in the Actions cache, outputs in expiring artifacts.
+# First run (empty cache) bootstraps everything.
+name: daily-signals-de
+
+on:
+  schedule:
+    - cron: "30 17 * * 1-5"  # 17:30 UTC = 18:30 Berlin in winter, 19:30 in summer, after Xetra close
+    - cron: "0 13 * * 0"     # Sunday 13:00 UTC: retrain + backtests
+  workflow_dispatch:
+    inputs:
+      retrain:
+        description: "Refit models and recompute all backtests"
+        type: boolean
+        default: false
+      tune:
+        description: "Re-run the hyper-parameter grid search (slow)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: daily-signals-de
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: project
+
+env:
+  DRIFTREV_MARKET: de
+  DRIFTREV_DATA_DIR: ${{ github.workspace }}/project/data
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}     # optional (R3 notifying)
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  DRIFTREV_WEBHOOK_URL: ${{ secrets.DRIFTREV_WEBHOOK_URL }}
+  PYTHONPATH: src
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      data_through: ${{ steps.pipe.outputs.data_through }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: project/requirements.txt
+      - run: pip install -r requirements.txt
+
+      - name: Restore data cache (warehouse + model artifacts)
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            project/data/de/warehouse.duckdb
+            project/data/de/artifacts
+          key: driftrev-de-data-${{ github.run_id }}
+          restore-keys: driftrev-de-data-
+
+      - name: Decide retrain
+        id: mode
+        run: |
+          flags=""
+          if [ "${{ github.event.schedule }}" = "0 13 * * 0" ] || [ "${{ inputs.retrain }}" = "true" ] \
+             || [ ! -f data/de/artifacts/model.joblib ]; then flags="--retrain"; fi
+          if [ "${{ inputs.tune }}" = "true" ]; then flags="$flags --tune"; fi
+          echo "flags=$flags" >> "$GITHUB_OUTPUT"
+          echo "cache hit: ${{ steps.restore.outputs.cache-matched-key || 'none (full bootstrap)' }}"
+
+      - name: Pipeline (incremental download -> transform -> score -> report -> housekeeping)
+        id: pipe
+        run: |
+          mkdir -p data/de
+          python -m driftrev.pipeline --mode update ${{ steps.mode.outputs.flags }} | tee data/de/pipeline_result.json
+          echo "data_through=$(python -c "import json;print(json.load(open('data/de/artifacts/metrics.json'))['data_through'])")" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        if: always()
+        run: cat data/de/site/summary.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no summary" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save data cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            project/data/de/warehouse.duckdb
+            project/data/de/artifacts
+          key: driftrev-de-data-${{ github.run_id }}
+
+      - name: Upload run artifact (expires automatically)
+        uses: actions/upload-artifact@v4
+        with:
+          name: driftrev-de-results-${{ steps.pipe.outputs.data_through }}-${{ github.run_id }}
+          retention-days: 30
+          path: |
+            project/data/de/site
+            project/data/de/artifacts/*.parquet
+            project/data/de/artifacts/metrics.json
+            project/data/de/artifacts/run_log.jsonl
+
+      - name: Save German site cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: project/data/de/site
+          key: driftrev-site-de-${{ github.run_id }}
+
+      - name: Restore US site cache
+        uses: actions/cache/restore@v4
+        with:
+          path: project/data/site
+          key: driftrev-site-us-${{ github.run_id }}
+          restore-keys: driftrev-site-us-
+          fail-on-cache-miss: false
+
+      - name: Compose Pages site
+        run: |
+          rm -rf pages
+          mkdir -p pages
+          if [ -d data/site ]; then cp -a data/site/. pages/; fi
+          if [ -d data/de/site ]; then
+            mkdir -p pages/de
+            cp -a data/de/site/. pages/de/
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: project/pages
+          retention-days: 7
+
+  deploy-pages:
+    needs: run
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

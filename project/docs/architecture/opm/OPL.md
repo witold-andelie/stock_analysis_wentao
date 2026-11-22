@@ -253,6 +253,12 @@ in **Run Artifacts** that expire, and in one rolling **Snapshot Release Asset**.
 - **Reporting** (`driftrev.report`) yields the HTML and markdown results. **Publishing Results** yields
   **Results Site** (GitHub Pages), **Job Summary** and a **Run Artifact** in state *retained* (30 days). [SIG/OPS] ✅
 - **Releasing Snapshot** (Sunday) replaces the single **Snapshot Release Asset** used by `--mode file`. [OPS] ✅
+- **Delivering German CD daily** (`daily_de.yml`, R7) runs `DRIFTREV_MARKET=de` at 17:30 UTC Monday to Friday (18:30 Berlin
+  in winter) with a Sunday retrain; its **Data Cache** is `driftrev-de-data-*` (paths under `project/data/de/`). There is no
+  German snapshot release. [OPS] ✅ (first real run pending)
+- **Composing the Results Site**: each daily workflow saves its site in `driftrev-site-us-*` / `driftrev-site-de-*`, restores
+  the other market's latest site, and deploys one Pages site (US at `/`, Germany at `/de/`); both deploy jobs share the
+  `pages-deploy` concurrency group. [OPS] ✅ (first real run pending)
 - **Housekeeping Data Files** (`python -m driftrev.housekeeping`) requires **Retention Policy** and changes
   **Data Files** from *current* to *deleted*: EDGAR root JSONs older than 2 days, EDGAR history pages
   older than 180 days, raw filing text older than 30 days (flags and tone stay in the warehouse), the daily signal archive older than 60 days, snapshot zips except the newest,
@@ -267,7 +273,9 @@ in **Run Artifacts** that expire, and in one rolling **Snapshot Release Asset**.
   **Hosted API** from *not deployed* to *serving* (health check `/health`). Templates only; never run by CI. [OPS] ⬜ (not deployed)
 - **GitHub Scheduler** handles **Garbage-collecting GitHub** weekly (`cleanup.yml`). It requires
   **Retention Policy**, changes **Data Cache** and **Run Artifact** entries older than their retention to
-  *expired* (deleted), deletes workflow runs older than 30 days, and keeps only the latest snapshot asset. [OPS] ✅
+  *expired* (deleted) but always keeps the newest cache of each prefix (`driftrev-data-`, `driftrev-de-data-`,
+  `driftrev-site-us-`, `driftrev-site-de-`), deletes workflow runs older than 30 days, and keeps only the latest snapshot
+  asset. [OPS] ✅
 
 ## SD6 · Roadmap (`SD6_roadmap.dot`), PLANNED
 

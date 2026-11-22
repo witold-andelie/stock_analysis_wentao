@@ -110,10 +110,35 @@ jobs:
             project/data/artifacts/metrics.json
             project/data/artifacts/run_log.jsonl
 
+      - name: Save US site cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: project/data/site
+          key: driftrev-site-us-${{ github.run_id }}
+
+      - name: Restore German site cache
+        uses: actions/cache/restore@v4
+        with:
+          path: project/data/de/site
+          key: driftrev-site-de-${{ github.run_id }}
+          restore-keys: driftrev-site-de-
+          fail-on-cache-miss: false
+
+      - name: Compose Pages site
+        run: |
+          rm -rf pages
+          mkdir -p pages
+          if [ -d data/site ]; then cp -a data/site/. pages/; fi
+          if [ -d data/de/site ]; then
+            mkdir -p pages/de
+            cp -a data/de/site/. pages/de/
+          fi
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: project/data/site
+          path: project/pages
           retention-days: 7
 
       - name: Release weekly snapshot (for --mode file), replacing the previous asset
@@ -130,6 +155,9 @@ jobs:
   deploy-pages:
     needs: run
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}

@@ -11,11 +11,16 @@ DRY=""; [[ "${1:-}" == "--dry-run" ]] && DRY="echo [dry-run]"
 : "${GH_REPO:?set GH_REPO=owner/repo}"
 cutoff() { date -u -d "-$1 days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-"$1"d +%Y-%m-%dT%H:%M:%SZ; }
 
-echo "== Actions caches: keep the newest driftrev-data-*, delete others older than ${GH_CACHE_DAYS}d"
-newest=$(gh cache list --repo "$GH_REPO" --key driftrev-data- --sort created_at --order desc --limit 1 --json id --jq '.[0].id // empty')
+cache_prefixes=(driftrev-data- driftrev-de-data- driftrev-site-us- driftrev-site-de-)
+echo "== Actions caches: keep the newest per prefix (${cache_prefixes[*]}), delete others older than ${GH_CACHE_DAYS}d"
+newest_ids="0"
+for prefix in "${cache_prefixes[@]}"; do
+  newest=$(gh cache list --repo "$GH_REPO" --key "$prefix" --sort created_at --order desc --limit 1 --json id --jq '.[0].id // empty')
+  newest_ids="$newest_ids,${newest:-0}"
+done
 c=$(cutoff "$GH_CACHE_DAYS")
 gh cache list --repo "$GH_REPO" --limit 100 --json id,key,createdAt \
-  --jq ".[] | select(.createdAt < \"$c\") | select(.id != ${newest:-0}) | .id" |
+  --jq ".[] | select(.createdAt < \"$c\") | select(.id as \$id | [$newest_ids] | index(\$id) | not) | .id" |
   while read -r id; do $DRY gh cache delete "$id" --repo "$GH_REPO"; done
 
 echo "== Workflow artifacts older than ${GH_ARTIFACT_DAYS}d"
