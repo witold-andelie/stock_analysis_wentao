@@ -25,12 +25,99 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+@dataclass(frozen=True)
+class Market:
+    """One tradable market. R7.1: `us` is implemented, `de` is declared only (R7.2+)."""
+
+    code: str
+    name: str
+    exchange_mic: str
+    timezone: str
+    run_time: str
+    currency: str
+    index_set: tuple[str, ...]
+    cap_bucket_by_index: tuple[tuple[str, str], ...]
+    benchmarks: tuple[tuple[str, str], ...]
+    cost_bps_one_way: tuple[tuple[str, float], ...]
+    data_subdir: str
+    implemented: bool
+
+    def cap_bucket(self, index_code: str) -> str | None:
+        """Cap bucket of an index code, or None if the code is not in this market."""
+        return dict(self.cap_bucket_by_index).get(index_code)
+
+    def cost_bps(self, cap_bucket: str) -> float:
+        """One-way cost in bps for a cap bucket; unknown buckets get the "mid" value."""
+        costs = dict(self.cost_bps_one_way)
+        return costs.get(cap_bucket, costs["mid"])
+
+
+MARKETS: dict[str, Market] = {
+    "us": Market(
+        code="us",
+        name="US equities (S&P 1500)",
+        exchange_mic="XNYS",
+        timezone="America/New_York",
+        run_time="22:30",
+        currency="USD",
+        index_set=("sp500", "sp400", "sp600"),
+        cap_bucket_by_index=(("sp500", "large"), ("sp400", "mid"), ("sp600", "small")),
+        benchmarks=(("SPY", "spy"), ("IWM", "iwm"), ("MDY", "mdy")),
+        cost_bps_one_way=(("large", 8.0), ("mid", 15.0), ("small", 25.0)),
+        data_subdir="",
+        implemented=True,
+    ),
+    "de": Market(
+        code="de",
+        name="German equities (Xetra: DAX + MDAX + SDAX)",
+        exchange_mic="XETR",
+        timezone="Europe/Berlin",
+        run_time="18:30",
+        currency="EUR",
+        index_set=("dax", "mdax", "sdax"),
+        cap_bucket_by_index=(("dax", "large"), ("mdax", "mid"), ("sdax", "small")),
+        benchmarks=(("^GDAXI", "dax"), ("^MDAXI", "mdax"), ("^SDAXI", "sdax")),
+        # ASSUMPTION (R7.1): Xetra event-day spreads; revisit in R7.4
+        cost_bps_one_way=(("large", 10.0), ("mid", 20.0), ("small", 35.0)),
+        data_subdir="de",
+        implemented=False,
+    ),
+}
+
+
+def get_market(code: str) -> Market:
+    """Look up a market by code, ignoring case and surrounding whitespace."""
+    code = code.strip().lower()
+    if code not in MARKETS:
+        raise ValueError(f"unknown market {code!r}; valid: {', '.join(sorted(MARKETS))}")
+    return MARKETS[code]
+
+
+class MarketNotImplementedError(RuntimeError):
+    """Raised when an entry point is asked to run a market whose `implemented` is False."""
+
+
+def require_implemented_market(market: Market | None = None) -> Market:
+    """Return `market` (default: MARKET) if implemented, else raise MarketNotImplementedError."""
+    if market is None:
+        market = MARKET
+    if not market.implemented:
+        raise MarketNotImplementedError(
+            f"market {market.code!r} is planned (roadmap R7.2+) and not implemented yet; set DRIFTREV_MARKET=us"
+        )
+    return market
+
+
+MARKET: Market = get_market(_env("DRIFTREV_MARKET", "us"))
+
+
 # --------------------------------------------------------------------------------------
 # Storage. Data never goes to GitHub: everything lives under DATA_DIR (default
 # project/data/, git-ignored). Point DRIFTREV_DATA_DIR at a mounted drive, a Docker
 # volume or a synced Google-Drive folder to keep it elsewhere.
 # --------------------------------------------------------------------------------------
-DATA_DIR = Path(_env("DRIFTREV_DATA_DIR", str(PROJECT_ROOT / "data"))).expanduser()
+DATA_ROOT = Path(_env("DRIFTREV_DATA_DIR", str(PROJECT_ROOT / "data"))).expanduser()
+DATA_DIR = DATA_ROOT / MARKET.data_subdir if MARKET.data_subdir else DATA_ROOT
 WAREHOUSE = DATA_DIR / "warehouse.duckdb"          # incremental raw + feature tables
 CACHE_DIR = DATA_DIR / "cache"                      # raw API payloads (EDGAR / Wikimedia)
 SNAPSHOT_DIR = DATA_DIR / "snapshot"                # "file" regime: ready-made parquet files

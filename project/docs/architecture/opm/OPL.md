@@ -224,7 +224,8 @@ allows a single writer process.
   holding periods, uniquely-correct predictions, guide arms, survivorship. [SRV] ✅
 - **Answering Queries** occurs if **Request** is *authorised*. It requires **REST API**, **MCP server** and
   **Artifact Store**. It invokes **Running Pipeline** and **Previewing Orders**. ✅
-- **Scheduling** is handled by **Market Calendar** and invokes **Running Pipeline** at 22:30 ET, Monday to Friday. ✅
+- **Scheduling** is handled by **Market Calendar** and invokes **Running Pipeline** at the active **Market**'s run time,
+  Monday to Friday (US default 22:30 New York; R7.1). ✅
 - **Running Pipeline** changes **Pipeline Job** through *queued → running → success | failed* and affects
   **Artifact Store**. ✅
 - **Researcher** handles **Monitoring**, which requires **Dashboard** and **Artifact Store**. ✅
@@ -287,10 +288,13 @@ in EUR. The US system stays the default and must behave exactly as today. All ex
 market: no look-ahead (row *t* uses data available by the Xetra close of *t*), TEST is never used to choose,
 tunables live in `config.py`, orders stay paper by default behind the **Order Guard**. China A-shares stay out of scope.
 
-- ⬜ **R7.1 Selecting Market** affects **Market** (*us* | *de*). **Market** exhibits exchange calendar, timezone,
-  scheduled run time (US 22:30 ET; DE 18:30 CET, after the 17:30 Xetra close), currency, benchmark and sector
-  series, **Cost Model**, index set and its own data directory (one DuckDB writer per market).
-  **Acquiring** and **Signalling** require **Market**. [OPS/ING]
+- ✅ **R7.1 Selecting Market** (`config.Market`, `config.MARKETS`, env `DRIFTREV_MARKET`, default *us*) affects
+  **Market** (*us* | *de*). **Market** exhibits exchange MIC (XNYS | XETR), timezone, scheduled run time (US 22:30 New
+  York; DE 18:30 Berlin, after the 17:30 Xetra close), currency, benchmarks, one-way cost per cap bucket (DE values are an
+  ASSUMPTION to revisit in R7.4), index set with cap buckets, and its own data directory (*us* keeps `DATA_ROOT`, *de*
+  uses `DATA_ROOT/de`, so each market has one DuckDB writer). **Scheduling** uses the active market's timezone and run
+  time. **Running Pipeline** and **Scheduling** require an *implemented* **Market**: until R7.2 lands, *de* is refused
+  with `MarketNotImplementedError` before any file is written (`tests/test_market.py`). [OPS/ING]
 - ⬜ **R7.2 Loading German Index Membership** requires **Public Sources (de)** (DAX / MDAX / SDAX constituent
   pages and their change history) and yields **membership_history (de)** (ticker, ISIN, index, start, end), which
   **universe** requires. ISIN replaces the SEC CIK as the stable key; Yahoo serves Xetra prices as `<symbol>.DE`.

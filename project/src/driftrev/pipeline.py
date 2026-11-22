@@ -422,6 +422,7 @@ def regime_block(ctx: pd.DataFrame) -> dict:
 # Orchestrator
 # --------------------------------------------------------------------------------------
 def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False) -> dict:
+    config.require_implemented_market()
     t0 = time.time()
     started = datetime.now(UTC).isoformat()
     steps: dict = {}
@@ -478,6 +479,7 @@ def main() -> None:
     ap.add_argument("--retrain", action="store_true", help="refit models and recompute all backtests")
     ap.add_argument("--tune", action="store_true", help="re-run the hyper-parameter grid search")
     a = ap.parse_args()
+    config.require_implemented_market()
     if a.command == "snapshot":
         print(export_snapshot())
         return

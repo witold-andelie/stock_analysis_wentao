@@ -12,8 +12,8 @@
 <text xml:space="preserve" text-anchor="middle" x="789.14" y="-978.74" font-family="Helvetica,sans-Serif" font-size="14.00">SD6 · Roadmap · dotted = PLANNED, solid = implemented anchor</text>
 <g id="clust1" class="cluster">
 <title>cluster_r7</title>
-<path fill="none" stroke="#999999" stroke-dasharray="1,5" d="M81.43,-188.52C81.43,-188.52 1392.51,-188.52 1392.51,-188.52 1398.51,-188.52 1404.51,-194.52 1404.51,-200.52 1404.51,-200.52 1404.51,-621.52 1404.51,-621.52 1404.51,-627.52 1398.51,-633.52 1392.51,-633.52 1392.51,-633.52 81.43,-633.52 81.43,-633.52 75.43,-633.52 69.43,-627.52 69.43,-621.52 69.43,-621.52 69.43,-200.52 69.43,-200.52 69.43,-194.52 75.43,-188.52 81.43,-188.52"/>
-<text xml:space="preserve" text-anchor="middle" x="736.97" y="-616.22" font-family="Helvetica,sans-Serif" font-size="14.00">R7 · German equities (Xetra: DAX 40 + MDAX 50 + SDAX 70) · PLANNED</text>
+<path fill="none" stroke="#999999" stroke-dasharray="1,5" d="M70.29,-188.52C70.29,-188.52 1392.51,-188.52 1392.51,-188.52 1398.51,-188.52 1404.51,-194.52 1404.51,-200.52 1404.51,-200.52 1404.51,-621.52 1404.51,-621.52 1404.51,-627.52 1398.51,-633.52 1392.51,-633.52 1392.51,-633.52 70.29,-633.52 70.29,-633.52 64.29,-633.52 58.29,-627.52 58.29,-621.52 58.29,-621.52 58.29,-200.52 58.29,-200.52 58.29,-194.52 64.29,-188.52 70.29,-188.52"/>
+<text xml:space="preserve" text-anchor="middle" x="731.4" y="-616.22" font-family="Helvetica,sans-Serif" font-size="14.00">R7 · German equities (Xetra: DAX 40 + MDAX 50 + SDAX 70) · PLANNED</text>
 </g>
 <!-- acquiring -->
 <g id="node1" class="node">
@@ -196,17 +196,17 @@
 <!-- market -->
 <g id="node16" class="node">
 <title>market</title>
-<polygon fill="#f2f2f2" stroke="black" stroke-dasharray="1,5" points="727.72,-602.02 547.47,-602.02 547.47,-549.02 727.72,-549.02 727.72,-602.02"/>
+<polygon fill="#e6e6e6" stroke="black" points="721.72,-602.02 553.47,-602.02 553.47,-549.02 721.72,-549.02 721.72,-602.02"/>
 <text xml:space="preserve" text-anchor="middle" x="637.59" y="-588.52" font-family="Helvetica,sans-Serif" font-size="10.00">Market</text>
-<text xml:space="preserve" text-anchor="middle" x="637.59" y="-577.27" font-family="Helvetica,sans-Serif" font-size="10.00">(us | de: calendar, timezone, run time,</text>
+<text xml:space="preserve" text-anchor="middle" x="637.59" y="-577.27" font-family="Helvetica,sans-Serif" font-size="10.00">(us | de: MIC, timezone, run time,</text>
 <text xml:space="preserve" text-anchor="middle" x="637.59" y="-566.02" font-family="Helvetica,sans-Serif" font-size="10.00">currency, benchmarks, cost model,</text>
 <text xml:space="preserve" text-anchor="middle" x="637.59" y="-554.77" font-family="Helvetica,sans-Serif" font-size="10.00">index set, data dir)</text>
 </g>
 <!-- market&#45;&gt;acquiring -->
 <g id="edge12" class="edge">
 <title>market&#45;&gt;acquiring</title>
-<path fill="none" stroke="black" d="M727.83,-600.04C782.79,-615.15 851.11,-633.92 896.12,-646.29"/>
-<ellipse fill="none" stroke="black" cx="900.18" cy="-647.41" rx="4" ry="4"/>
+<path fill="none" stroke="black" d="M722.12,-598.48C778.03,-613.84 849.65,-633.52 896.23,-646.32"/>
+<ellipse fill="none" stroke="black" cx="900.28" cy="-647.43" rx="4" ry="4"/>
 </g>
 <!-- market&#45;&gt;signalling -->
 <g id="edge13" class="edge">
@@ -217,17 +217,17 @@
 <!-- r71 -->
 <g id="node17" class="node">
 <title>r71</title>
-<ellipse fill="#f2f2f2" stroke="black" stroke-dasharray="1,5" cx="200.64" cy="-572.52" rx="123.21" ry="29.52"/>
-<text xml:space="preserve" text-anchor="middle" x="200.64" y="-579.9" font-family="Helvetica,sans-Serif" font-size="10.00">R7.1 Selecting Market</text>
-<text xml:space="preserve" text-anchor="middle" x="200.64" y="-568.65" font-family="Helvetica,sans-Serif" font-size="10.00">(config.Market; US stays the default</text>
-<text xml:space="preserve" text-anchor="middle" x="200.64" y="-557.4" font-family="Helvetica,sans-Serif" font-size="10.00">and behaves exactly as today)</text>
+<ellipse fill="#ead7ff" stroke="black" cx="200.64" cy="-571.52" rx="134.35" ry="30.58"/>
+<text xml:space="preserve" text-anchor="middle" x="200.64" y="-579.65" font-family="Helvetica,sans-Serif" font-size="10.00">R7.1 Selecting Market ✓</text>
+<text xml:space="preserve" text-anchor="middle" x="200.64" y="-566.9" font-family="Helvetica,sans-Serif" font-size="10.00">(config.Market + DRIFTREV_MARKET;</text>
+<text xml:space="preserve" text-anchor="middle" x="200.64" y="-555.65" font-family="Helvetica,sans-Serif" font-size="10.00">US default unchanged, de refused)</text>
 </g>
 <!-- r71&#45;&gt;market -->
 <g id="edge11" class="edge">
 <title>r71&#45;&gt;market</title>
-<path fill="none" stroke="black" d="M335.59,-573.45C400.11,-573.89 476.19,-574.42 535.72,-574.83"/>
-<polygon fill="black" stroke="black" points="335.78,-569.95 325.76,-573.38 335.74,-576.95 335.78,-569.95"/>
-<polygon fill="black" stroke="black" points="535.48,-578.32 545.51,-574.89 535.53,-571.32 535.48,-578.32"/>
+<path fill="none" stroke="black" d="M346.45,-572.85C410.77,-573.44 484.68,-574.12 541.8,-574.65"/>
+<polygon fill="black" stroke="black" points="346.64,-569.36 336.61,-572.76 346.58,-576.35 346.64,-569.36"/>
+<polygon fill="black" stroke="black" points="541.45,-578.15 551.48,-574.74 541.51,-571.15 541.45,-578.15"/>
 </g>
 <!-- r72 -->
 <g id="node18" class="node">

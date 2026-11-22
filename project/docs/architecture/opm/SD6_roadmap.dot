@@ -36,8 +36,8 @@ digraph SD6 {
   subgraph cluster_r7 {
     label="R7 · German equities (Xetra: DAX 40 + MDAX 50 + SDAX 70) · PLANNED"; style="rounded,dotted"; color="#999999";
     node [style="filled,dotted", fillcolor="#f2f2f2"];
-    market   [shape=box, label="Market\n(us | de: calendar, timezone, run time,\ncurrency, benchmarks, cost model,\nindex set, data dir)"];
-    r71 [shape=ellipse, label="R7.1 Selecting Market\n(config.Market; US stays the default\nand behaves exactly as today)"];
+    market   [shape=box, style=filled, fillcolor="#e6e6e6", label="Market\n(us | de: MIC, timezone, run time,\ncurrency, benchmarks, cost model,\nindex set, data dir)"];
+    r71 [shape=ellipse, style=filled, fillcolor="#ead7ff", label="R7.1 Selecting Market ✓\n(config.Market + DRIFTREV_MARKET;\nUS default unchanged, de refused)"];
     r72 [shape=ellipse, label="R7.2 Loading German Index Membership\n(DAX/MDAX/SDAX constituents + change\ntables; ISIN key; Yahoo .DE tickers)"];
     r72o [shape=box, label="membership_history (de)\n(ticker, isin, index, start, end)"];
     r73 [shape=ellipse, label="R7.3 Loading German Market Series\n(DAX/MDAX/SDAX indices, VDAX or\nrealised-vol proxy, Bund yields)"];
