@@ -12,11 +12,14 @@ step (EDA, modeling, simulation, API) refers to the same names:
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 
 from . import config
 
+log = logging.getLogger(__name__)
 S = config.SETTINGS
 TARGET = "is_positive_growth_10d"          # growth_future_10d >= 1.02
 TARGET_GROWTH = f"growth_future_{S.target.horizon}d"
@@ -110,6 +113,10 @@ TO_DROP = ["ticker", "date", "company", "sub_industry", "wikipedia_title", "cik"
 def add_engineered(df: pd.DataFrame) -> pd.DataFrame:
     """Binned / manual features (each bin set counts as one engineered feature)."""
     d = df.copy()
+    missing = [c for c in NUMERIC if c not in d]
+    if missing:
+        d[missing] = np.nan
+        log.info("Added %d missing numeric columns: %s", len(missing), ", ".join(missing))
     if "edgar_category_text" not in d:  # snapshots built before R4 have no text layer
         d["edgar_category_text"] = d.get("edgar_category", "none")
     d["edgar_category_text"] = d["edgar_category_text"].fillna(d.get("edgar_category", "none"))
@@ -219,5 +226,9 @@ def feature_sets(ml: pd.DataFrame) -> dict[str, list[str]]:
     pooled = num + base_dummies
     stock_num = [c for c in num if c not in MARKET_NUMERIC]
     stock_dummies = [c for c in base_dummies if not c.startswith(MARKET_DUMMY_PREFIXES)]
-    return {"pooled": pooled, "pooled_wom": pooled + wom, "cs_keep_market": pooled + cs,
+    sets = {"pooled": pooled, "pooled_wom": pooled + wom, "cs_keep_market": pooled + cs,
             "cs_drop_market": stock_num + stock_dummies + cs}
+    all_nan = [c for c in num + dummies + cs if ml[c].notna().sum() == 0]
+    if all_nan:
+        log.info("Dropped %d all-NaN feature columns: %s", len(all_nan), ", ".join(all_nan))
+    return {name: [c for c in cols if c not in all_nan] for name, cols in sets.items()}
