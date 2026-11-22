@@ -19,7 +19,7 @@ next morning's 09:00 ET, because trades are entered at the next open). Targets u
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 import numpy as np
 import pandas as pd
@@ -377,12 +377,14 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
               filing_text: pd.DataFrame | None = None, *,
               ctx: pd.DataFrame | None = None, cap_buckets: dict[str, str] | None = None,
               liquid_by_membership: Iterable[str] | None = None, min_dollar_volume: float | None = None,
-              breakout_min_median_turnover: float | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+              breakout_min_median_turnover: float | None = None,
+              earnings_by_ticker: Mapping[str, pd.DataFrame] | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Returns (events, daily_panel, market_ctx_with_regime).
 
     membership: R1 membership_history -> point-in-time `in_index`; with `restrict_events` (default
     Settings.membership.restrict_events) events are only generated while the stock was a member.
-    With no membership table every row counts as a member (old behaviour)."""
+    With no membership table every row counts as a member (old behaviour).
+    earnings_by_ticker: predated releases replace EDGAR earnings dating when supplied."""
     restrict = config.SETTINGS.membership.restrict_events if restrict_events is None else restrict_events
     intervals = mbr.merged_intervals(membership) if membership is not None and len(membership) else None
     buckets = mbr.bucket_intervals(membership, cap_buckets) if intervals is not None else {}
@@ -408,7 +410,10 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
                             min_dollar_volume=min_dollar_volume,
                             breakout_min_median_turnover=breakout_min_median_turnover)
         cik = row.get("cik")
-        earn = earnings_days(filings, int(cik), f["date"].values) if pd.notna(cik) and not filings.empty else pd.DataFrame(columns=["date", "earn_accepted_et"])
+        if earnings_by_ticker is None:
+            earn = earnings_days(filings, int(cik), f["date"].values) if pd.notna(cik) and not filings.empty else pd.DataFrame(columns=["date", "earn_accepted_et"])
+        else:
+            earn = earnings_by_ticker.get(tkr, pd.DataFrame(columns=["date", "earn_accepted_et"]))
         f = f.merge(earn, on="date", how="left")
         f["is_earnings"] = f["earn_accepted_et"].notna()
         # point-in-time membership: a ticker without any interval row is treated as never a member
@@ -476,7 +481,7 @@ def build_all(uni: pd.DataFrame, px: pd.DataFrame, market: pd.DataFrame, macro_w
         ev = ev.merge(att, on=["wikipedia_title", "date"], how="left")
     ev = ev.join(sue_features(ev, sue))
     # analyst-consensus EPS surprise (HW1 Q4), point-in-time
-    ev = ev.join(consensus.consensus_features(ev, consensus_eps, ctx.index))
+    ev = ev.join(consensus.consensus_features(ev, consensus_eps, ctx.index, market=config.MARKET))
     # market context + regime
     reg = regime_table(ctx, panel[panel["in_index"]] if restrict and intervals is not None else panel)  # breadth among members
     ctx = ctx.join(reg)

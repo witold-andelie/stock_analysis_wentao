@@ -35,6 +35,7 @@ class Market:
     exchange_mic: str
     timezone: str
     run_time: str
+    close_time: str
     currency: str
     index_set: tuple[str, ...]
     cap_bucket_by_index: tuple[tuple[str, str], ...]
@@ -64,6 +65,7 @@ MARKETS: dict[str, Market] = {
         exchange_mic="XNYS",
         timezone="America/New_York",
         run_time="22:30",
+        close_time="16:00",
         currency="USD",
         index_set=("sp500", "sp400", "sp600"),
         cap_bucket_by_index=(("sp500", "large"), ("sp400", "mid"), ("sp600", "small")),
@@ -82,6 +84,7 @@ MARKETS: dict[str, Market] = {
         exchange_mic="XETR",
         timezone="Europe/Berlin",
         run_time="18:30",
+        close_time="17:30",
         currency="EUR",
         index_set=("dax", "mdax", "sdax"),
         cap_bucket_by_index=(("dax", "large"), ("mdax", "mid"), ("sdax", "small")),

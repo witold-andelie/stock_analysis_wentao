@@ -1,4 +1,4 @@
-"""German price-only events and research through the shared feature and model pipelines."""
+"""German events and research through the shared feature and model pipelines."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import pandas as pd
 from . import (
     artifacts,
     config,
+    consensus,
     dataset,
     de_context,
     de_market,
@@ -45,12 +46,22 @@ def universe_for_features(universe_de: pd.DataFrame) -> pd.DataFrame:
     return uni[FEATURE_UNIVERSE_COLS].reset_index(drop=True)
 
 
+def german_earnings(cons: pd.DataFrame, sessions) -> dict[str, pd.DataFrame]:
+    """Date German releases while preserving the original ET-naive acceptance timestamp."""
+    releases = consensus.release_session_dates(cons, sessions, config.MARKETS["de"])
+    return {ticker: rows[["date", "release_et"]].rename(columns={"release_et": "earn_accepted_et"}).reset_index(drop=True)
+            for ticker, rows in releases.groupby("ticker")}
+
+
 def ingest_de(refresh: bool = False) -> dict:
-    """Update German market series, rates, membership, universe and prices."""
+    """Update German market series, rates, membership, universe, prices and consensus EPS."""
     _require_de()
     report = {"market": de_market.update_de_market(), "rates": de_market.update_de_rates()}
     report["membership"] = de_membership.update_de_membership(refresh=refresh)
     report["universe"] = de_universe.update_de_universe()
+    universe_de = store.read_table(de_universe.TABLE)
+    symbols = universe_de.loc[universe_de["price_source"].eq("xetra"), "symbol"].dropna()
+    report["consensus"] = consensus.update_consensus(sorted(set(symbols[symbols.ne("")])))
     return report
 
 
@@ -65,9 +76,12 @@ def transform_de(save: bool = True) -> dict[str, pd.DataFrame]:
     market = prices.load_market()
     macro_wide = macro.load_macro_wide()
     ctx = de_context.market_context_de(market, macro_wide)
+    consensus_eps = consensus.load_consensus()
+    earnings_by_ticker = german_earnings(consensus_eps, ctx.index)
     ev, panel, ctx = features.build_all(
         uni, px, market, macro_wide, filings=pd.DataFrame(), sue=pd.DataFrame(), pageviews=pd.DataFrame(),
-        membership=membership, consensus_eps=None, filing_text=None, ctx=ctx,
+        membership=membership, consensus_eps=consensus_eps, filing_text=None, ctx=ctx,
+        earnings_by_ticker=earnings_by_ticker,
         cap_buckets=dict(config.MARKETS["de"].cap_bucket_by_index),
         liquid_by_membership=uni.loc[uni["price_source"].ne("xetra"), "ticker"],
         min_dollar_volume=config.MARKETS["de"].min_dollar_volume,
@@ -104,7 +118,7 @@ def event_summary(events: pd.DataFrame) -> dict:
 
 
 def run_de(refresh: bool = False) -> dict:
-    """Update German raw inputs, transform them and report price-only event counts."""
+    """Update German raw inputs, transform them and report event counts."""
     report = ingest_de(refresh=refresh)
     data = transform_de()
     report["transform"] = event_summary(data["events"])

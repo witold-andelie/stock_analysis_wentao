@@ -4,7 +4,7 @@ Yahoo lists, per earnings release, the consensus EPS estimate, the reported EPS 
 surprise in percent. We keep them in the warehouse table `consensus_eps` (loaded incrementally,
 partial coverage is fine) and attach them to events point-in-time:
 
-    * only releases stamped at or before the event day's 16:00 ET close are usable
+    * only releases stamped at or before the event day's local market close are usable
       (a release after the close of day t is not knowable at t -> no look-ahead);
     * the release must be within `Consensus.window_sessions` (3) trading sessions before the event
       (a surprise older than that is not "the news" any more);
@@ -125,11 +125,31 @@ def load_consensus() -> pd.DataFrame:
     return store.read_table(TABLE)
 
 
+def release_session_dates(cons: pd.DataFrame, sessions, market: config.Market) -> pd.DataFrame:
+    """Map ET-naive releases to the first session able to react in the market's timezone."""
+    if cons.empty or len(sessions) == 0:
+        return pd.DataFrame(columns=["ticker", "date", "release_et", "release_local"])
+    sess = np.asarray(pd.DatetimeIndex(sessions).sort_values().values, dtype="datetime64[ns]")
+    rows = cons[["ticker", "release_et"]].dropna(subset=["release_et"]).copy()
+    rows["release_et"] = pd.to_datetime(rows["release_et"])
+    rows["release_local"] = rows["release_et"].dt.tz_localize("America/New_York").dt.tz_convert(market.timezone)
+    local = rows["release_local"].dt.tz_localize(None)
+    day = local.dt.normalize()
+    hour, minute = map(int, market.close_time.split(":"))
+    after_close = local.dt.hour * 60 + local.dt.minute >= hour * 60 + minute
+    side_date = np.where(after_close, (day + pd.Timedelta(days=1)).values, day.values)
+    idx = np.searchsorted(sess, side_date, side="left")
+    ok = idx < len(sess)
+    out = rows.loc[ok].copy()
+    out.insert(1, "date", sess[idx[ok]])
+    return out.sort_values("release_et").drop_duplicates(["ticker", "date"], keep="first").reset_index(drop=True)
+
+
 # --------------------------------------------------------------------------------------
 # Point-in-time attachment (pure, tested)
 # --------------------------------------------------------------------------------------
 def consensus_features(events: pd.DataFrame, cons: pd.DataFrame, sessions: pd.DatetimeIndex | np.ndarray,
-                       window: int | None = None) -> pd.DataFrame:
+                       window: int | None = None, *, market: config.Market | None = None) -> pd.DataFrame:
     """events: ticker, date (index = event index). cons: `consensus_eps` rows. sessions: trading calendar.
     Returns a frame aligned to events.index with FEATURE_COLS (NaN where nothing qualifies)."""
     win = config.SETTINGS.consensus.window_sessions if window is None else window
@@ -139,7 +159,10 @@ def consensus_features(events: pd.DataFrame, cons: pd.DataFrame, sessions: pd.Da
         return out
     sess = np.asarray(pd.DatetimeIndex(sessions).sort_values().values, dtype="datetime64[ns]")
     left = events[["ticker", "date"]].copy()
-    left["cutoff"] = pd.to_datetime(left["date"]) + pd.Timedelta(hours=16)     # event day's close
+    market = config.MARKET if market is None else market
+    hour, minute = map(int, market.close_time.split(":"))
+    close = pd.to_datetime(left["date"]) + pd.Timedelta(hours=hour, minutes=minute)
+    left["cutoff"] = close.dt.tz_localize(market.timezone).dt.tz_convert("America/New_York").dt.tz_localize(None)
     left = left.reset_index().sort_values("cutoff")
     right = cons.dropna(subset=["release_et"]).sort_values("release_et")[
         ["ticker", "release_et", "release_date", "eps_estimate", "reported_eps", "surprise_pct"]]

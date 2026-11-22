@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from driftrev import config, de_context, de_market, de_membership, de_pipeline, de_universe, features, prices, store
+from driftrev import config, consensus, de_context, de_market, de_membership, de_pipeline, de_universe, features, prices, store
 from driftrev import membership as mbr
 
 
@@ -242,18 +242,25 @@ def test_transform_de_writes_tables(de_env, monkeypatch):
     assert "date" in saved["ctx"]
     assert config.WAREHOUSE == de_env / "warehouse.duckdb"
     steps = []
+    consensus_calls = []
 
     def update(name, **kwargs):
         steps.append((name, kwargs))
         return {"step": name}
 
+    def update_consensus(tickers):
+        consensus_calls.append(tickers)
+        return {"step": "consensus"}
+
     monkeypatch.setattr(de_market, "update_de_market", lambda: update("market"))
     monkeypatch.setattr(de_market, "update_de_rates", lambda: update("rates"))
     monkeypatch.setattr(de_membership, "update_de_membership", lambda refresh=False: update("membership", refresh=refresh))
     monkeypatch.setattr(de_universe, "update_de_universe", lambda: update("universe"))
+    monkeypatch.setattr(consensus, "update_consensus", update_consensus)
     report = de_pipeline.run_de(refresh=True)
     assert steps == [("market", {}), ("rates", {}), ("membership", {"refresh": True}), ("universe", {})]
     assert report == {**{name: {"step": name} for name in ("market", "rates", "membership", "universe")},
+                      "consensus": {"step": "consensus"},
                       "transform": de_pipeline.event_summary(saved["events"])}
 
 

@@ -402,7 +402,7 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
   rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or
   modelled separately is decided on VALIDATION. [TRF/RES]
-- ⬜ **R7.5 Dating German Releases** requires **Public Sources (de)** and feeds **Transforming**: earnings release
+- 🟡 **R7.5 Dating German Releases** (earnings ✅, ad-hoc notices ⬜) requires **Public Sources (de)** and feeds **Transforming**: earnings release
   dates for the *earnings_** families and MAR Art. 17 ad-hoc notices as the analogue of SEC 8-K items for
   *shock_crash* causes. A release after the 17:30 CET close maps to the next session. [ING/TRF]
   *Source check 2026-11-22:* Yahoo `get_earnings_dates` covers German names back to 2014 with EPS estimate and
@@ -411,6 +411,18 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   session mapping must be checked against prices. No free, documented bulk archive of ad-hoc notices was found
   (EQS publishes per-issuer IR feeds only), so ad-hoc causes for *shock_crash* stay ⬜ until a source exists; German
   crashes can still be detected from prices, without a cause taxonomy.
+  *Implemented 2026-11-22 (earnings):* **Market** exhibits `close_time` (US 16:00, DE 17:30);
+  `consensus.release_session_dates` converts Yahoo's US-Eastern stamps to the market timezone and maps a release at or
+  after the local close to the next session (DST-gap weeks handled); `consensus_features` uses the market's local close as
+  the knowability cutoff; `build_all(earnings_by_ticker=...)` replaces EDGAR dating for German tickers; `ingest_de` loads
+  consensus EPS for Xetra symbols (154 of 170 have data, 5,346 releases 2013-01..2026-11). **Alignment check:** median
+  |return| is 2.31 % on the mapped session vs 1.08–1.47 % on the two sessions before and after, and the mapped session is
+  the largest of the five in 42 %; releases stamped 18:00–23:59 Berlin (424, ~9 %) look one session late (the session
+  before reacts as much), an accepted error because fixing it from prices would be look-ahead.
+  **Research with earnings (11,933 events: +4,170 earnings events):** production RF VAL AUC 0.528, TEST AUC 0.546;
+  walk-forward OOS AUC 0.534, CAGR −1.2 %; `earnings_up` and `earnings_down` have the same 10-day hit rate (37.5 % vs
+  36.0 %): **no German post-earnings drift** is visible with these features. The earnings families stay in the German
+  dataset (VALIDATION composition keeps all families).
 - 🟡 **R7.6 Trading on Xetra** (`driftrev.broker_ibkr`; owner decision: Interactive Brokers, `ib_async==2.1.0`, imported
   lazily) requires **Signal Book**, **Deutsche Börse Xetra** (IB exchange `IBIS`, EUR) and a running TWS / IB Gateway, and
   feeds **Serving**: `service.broker_for_market()` routes *us* → Alpaca, *de* → IBKR. Same public API and **Order Guard**
