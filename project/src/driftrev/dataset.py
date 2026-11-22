@@ -173,7 +173,7 @@ def prepare(events: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     ml = ml.loc[:, ~ml.columns.duplicated()]
     ml["split"] = temporal_split(ml["date"])
     ml = add_cross_sectional(ml)
-    return ml, feature_sets(ml)[config.SETTINGS.research.feature_set]
+    return ml, feature_sets(ml)[config.research_settings().feature_set]
 
 
 def fill_for_model(X: pd.DataFrame) -> pd.DataFrame:

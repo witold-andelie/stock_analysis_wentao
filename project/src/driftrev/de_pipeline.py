@@ -1,14 +1,28 @@
-"""German price-only events through the shared feature pipeline; no model training."""
+"""German price-only events and research through the shared feature and model pipelines."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import logging
+from datetime import UTC, datetime
 
 import pandas as pd
 
-from . import config, de_context, de_market, de_membership, de_universe, features, macro, prices, store
+from . import (
+    artifacts,
+    config,
+    dataset,
+    de_context,
+    de_market,
+    de_membership,
+    de_universe,
+    features,
+    macro,
+    pipeline,
+    prices,
+    store,
+)
 from .de_market import _require_de
 
 FEATURE_UNIVERSE_COLS = ["ticker", "company", "sector", "sub_industry", "cap_bucket", "cik", "wikipedia_title",
@@ -83,14 +97,38 @@ def run_de(refresh: bool = False) -> dict:
     return report
 
 
+def research_de(tune: bool = False, with_walkforward: bool = True) -> dict:
+    """Train and backtest the transformed German warehouse and persist research metrics."""
+    _require_de()
+    events = store.read_table("events")
+    panel = store.read_table("daily_panel")
+    if events.empty or panel.empty:
+        raise RuntimeError("run transform_de first")
+    market = prices.load_market()
+    config.ensure_dirs()
+    ml, feats = dataset.prepare(events)
+    metrics = artifacts.load_metrics()
+    metrics.update(pipeline.train_and_backtest(ml, feats, panel, market, tune=tune, with_walkforward=with_walkforward))
+    metrics.update({"market": "de", "generated_at": datetime.now(UTC).isoformat(),
+                    "data_through": pd.Timestamp(panel["date"].max()).date().isoformat(),
+                    "n_events": int(len(events)), "n_panel_rows": int(len(panel)), "mode": "warehouse"})
+    artifacts.save_metrics(metrics)
+    return metrics
+
+
 def main() -> None:
-    """Run ingestion and transformation, or transform the existing German warehouse."""
+    """Run ingestion and transformation, or transform/research the existing German warehouse."""
     ap = argparse.ArgumentParser(description="German price-only event pipeline")
     ap.add_argument("--transform-only", action="store_true", help="reuse warehouse inputs without downloading")
+    ap.add_argument("--research", action="store_true", help="train and backtest the transformed warehouse without downloading")
+    ap.add_argument("--tune", action="store_true", help="re-run the research hyper-parameter grid search")
     args = ap.parse_args()
     _require_de()
     logging.basicConfig(level=logging.INFO)
-    report = event_summary(transform_de()["events"]) if args.transform_only else run_de()
+    if args.research:
+        report = research_de(tune=args.tune)
+    else:
+        report = event_summary(transform_de()["events"]) if args.transform_only else run_de()
     print(json.dumps(report, indent=2, default=str))
 
 

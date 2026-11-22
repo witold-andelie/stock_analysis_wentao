@@ -133,9 +133,14 @@ def load_snapshot() -> dict[str, pd.DataFrame]:
 # --------------------------------------------------------------------------------------
 # Step 3-4: train + backtest
 # --------------------------------------------------------------------------------------
+def benchmark_tickers() -> tuple[str, str]:
+    """Primary and small-cap benchmarks of the active market, looked up at call time."""
+    return config.MARKET.primary_benchmark, config.MARKET.small_benchmark
+
+
 def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, market: pd.DataFrame,
                        tune: bool = False, with_walkforward: bool = True, with_comparison: bool | None = None) -> dict:
-    rs = S.research
+    rs = config.research_settings()
     versions = models.check_sklearn_version()           # HW4 lesson: warn on scikit-learn >= 1.8, log versions
     ml = dataset.add_cross_sectional(ml) if not any(c.startswith("cs_rank_") for c in ml.columns) else ml
     feats = dataset.feature_sets(ml)[rs.feature_set]    # production feature set is a config choice (VALIDATION)
@@ -168,7 +173,8 @@ def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, 
 
     # exact simulations on TEST
     start = (pd.Timestamp(S.split.valid_end) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    spy = market[market["ticker"] == "SPY"].set_index("date")["close"].sort_index()
+    primary, small = benchmark_tickers()
+    spy = market[market["ticker"] == primary].set_index("date")["close"].sort_index()
     curves, trades, strat, cfgs = [], [], [], {}
     for cfg in simulate.standard_strategies(prob_col, thr):
         eq, tr = simulate.exact_sim(test, panel, cfg, start=start)
@@ -187,8 +193,8 @@ def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, 
     guide = guide_analysis(test, ml, panel, start, cfgs, strat, spy)
     research_block = research_artifacts(out, panel, test, start, prod, thr, cfgs, comparison, versions)
     end = panel["date"].max()
-    bench_series = [simulate.buy_and_hold(market, "SPY", start, end, S.strategy.initial_capital),
-                    simulate.buy_and_hold(market, "IWM", start, end, S.strategy.initial_capital),
+    bench_series = [simulate.buy_and_hold(market, primary, start, end, S.strategy.initial_capital),
+                    simulate.buy_and_hold(market, small, start, end, S.strategy.initial_capital),
                     simulate.momentum_baseline(panel, start, end, S.strategy.initial_capital)]
     benchmarks = []
     for b in bench_series:
@@ -226,7 +232,7 @@ def train_and_backtest(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, 
 def research_artifacts(out: pd.DataFrame, panel: pd.DataFrame, test: pd.DataFrame, start: str, prod: str, thr: float,
                        cfgs: dict, comparison: pd.DataFrame, versions: dict) -> dict:
     """Evidence tables for the research items (composition, capacity, cost model, HW2/HW3 studies)."""
-    rs = S.research
+    rs = config.research_settings()
     comp = research.composition_study(out, panel, prod, thr)
     artifacts.save_frame("composition.parquet", comp)
     artifacts.save_frame("capacity_study.parquet", research.capacity_study(out, panel, prod))
@@ -252,19 +258,22 @@ def research_artifacts(out: pd.DataFrame, panel: pd.DataFrame, test: pd.DataFram
     if winner is not None:
         wd = {k: (winner[k].item() if isinstance(winner[k], np.generic) else winner[k])
               for k in ("variant", "learner", "val_auc", "val_prec_top10", "test_auc", "test_prec_top10") if k in winner}
+    cap_costs = {"enabled": S.cap_costs.enabled, "large": S.cap_costs.large, "mid": S.cap_costs.mid,
+                 "small": S.cap_costs.small, "flat": S.costs.bps_one_way}
+    if config.MARKET.code != "us":
+        cap_costs.update(dict(config.MARKET.cost_bps_one_way))
     return {"versions": versions, "feature_set": rs.feature_set, "model_layout": rs.model_layout,
             "book_exclude_families": list(rs.book_exclude_families),
             "book_exclude_categories": list(rs.book_exclude_categories),
             "max_trades_per_day": rs.max_trades_per_day,
-            "cap_costs_bps": {"enabled": S.cap_costs.enabled, "large": S.cap_costs.large, "mid": S.cap_costs.mid,
-                              "small": S.cap_costs.small, "flat": S.costs.bps_one_way},
+            "cap_costs_bps": cap_costs,
             "comparison_winner_validation": wd,
             "suggested_composition_validation": research.suggest_composition(comp)}
 
 
 def walkforward_block(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, market: pd.DataFrame, best: dict) -> dict:
     """R2: yearly expanding refits, stitched out-of-sample predictions, exact simulation, honest track record."""
-    rs = S.research
+    rs = config.research_settings()
     kind = rs.wf_model
     stitched, by_year = walkforward.run(ml, feats, kind, best.get(kind, {}), rs.model_layout)
     if stitched.empty:
@@ -286,20 +295,22 @@ def walkforward_block(ml: pd.DataFrame, feats: list[str], panel: pd.DataFrame, m
 
 
 def _wf_metrics(block: dict) -> dict:
-    """metrics.json: `walkforward` = flat dict of scalars (headline strategy wf_model_top5 + same-window SPY),
+    """metrics.json: `walkforward` = flat scalars (headline wf_model_top5 + same-window primary benchmark),
     `walkforward_detail` = per-year table, all strategies and benchmarks."""
     if not block:
         return {"walkforward": {}}
     by = {m["name"]: m for m in block["strategies"]}
     head = by.get("wf_model_top5", {})
     bm = {m["name"]: m for m in block["benchmarks"]}
+    primary, _ = benchmark_tickers()
+    benchmark = bm.get(f"{primary}_buy_hold", {})
     flat = {"strategy": "wf_model_top5", "model": block["model"], "feature_set": block["feature_set"],
             "first_year": block["first_year"], "purge_days": block["purge_days"], "n_oos_events": block["n_oos_events"],
             "oos_auc": block["oos_auc"], "oos_precision_selected": block["oos_precision_selected"],
             "oos_base_rate": block["oos_base_rate"], "start": head.get("start"), "end": head.get("end"),
             **{k: head.get(k) for k in ("cagr", "sharpe", "max_drawdown", "total_return", "n_trades", "win_rate", "avg_trade_ret")},
-            "spy_cagr": bm.get("SPY_buy_hold", {}).get("cagr"), "spy_sharpe": bm.get("SPY_buy_hold", {}).get("sharpe"),
-            "spy_max_drawdown": bm.get("SPY_buy_hold", {}).get("max_drawdown")}
+            "spy_cagr": benchmark.get("cagr"), "spy_sharpe": benchmark.get("sharpe"),
+            "spy_max_drawdown": benchmark.get("max_drawdown")}
     return {"walkforward": flat, "walkforward_detail": block}
 
 

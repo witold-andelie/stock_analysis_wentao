@@ -56,6 +56,7 @@ def build_signals(ev: pd.DataFrame, prob: np.ndarray, thr: float, model_name: st
     """ev: event rows (latest dates) with ticker/date/close/etc. Returns the signals frame in
     the artifact contract."""
     st = S.strategy
+    rs = config.research_settings()
     d = ev.copy()
     d["prob"] = prob
     caps = d["cap_bucket"] if "cap_bucket" in d else pd.Series(None, index=d.index)
@@ -64,9 +65,9 @@ def build_signals(ev: pd.DataFrame, prob: np.ndarray, thr: float, model_name: st
     d["tier"] = [assign_tier(p, thr, r, e, rt) for p, r, e, rt in
                  zip(d["prob"], d["regime_state"].fillna("normal"), d["expected_net_return"], d["round_trip_cost"])]
     # book composition (decided on VALIDATION): excluded families / EDGAR categories are never model BUYs
-    ex = d["event_family"].isin(S.research.book_exclude_families)
+    ex = d["event_family"].isin(rs.book_exclude_families)
     if "edgar_category" in d:
-        ex |= d["edgar_category"].isin(S.research.book_exclude_categories)
+        ex |= d["edgar_category"].isin(rs.book_exclude_categories)
     d["tier"] = np.where(ex & d["tier"].isin(["STRONG_BUY", "BUY", "WATCH"]), "SKIP", d["tier"])
     d["suggested_weight"] = np.where(d["tier"].isin(["STRONG_BUY", "BUY"]),
                                      np.clip((1 / st.max_positions) * (0.5 + (d["prob"] - thr) / max(1e-6, 1 - thr) * 2), 0.1, 0.3), 0.0)

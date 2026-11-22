@@ -30,7 +30,7 @@ S = config.SETTINGS
 
 def year_splits(dates: pd.Series, first_year: int | None = None, purge_days: int | None = None) -> list[dict]:
     """Boundaries only (no data): one dict per prediction year."""
-    rs = S.research
+    rs = config.research_settings()
     first_year = first_year or rs.wf_first_year
     purge = pd.Timedelta(days=rs.wf_purge_days if purge_days is None else purge_days)
     last = int(pd.Timestamp(dates.max()).year)
@@ -49,7 +49,7 @@ def run(ml: pd.DataFrame, features: list[str], kind: str, params: dict, layout: 
     """Returns (stitched OOS predictions of every event, per-year table).
     New columns: proba_wf, wf_thr, wf_score (= proba - thr + 0.5, so one fixed 0.5 cut reproduces
     the per-year thresholds in the exact simulator), wf_year."""
-    rs = S.research
+    rs = config.research_settings()
     known = ml[TARGET].notna()
     parts, table = [], []
     for sp in year_splits(ml["date"], first_year):
@@ -84,9 +84,13 @@ def run(ml: pd.DataFrame, features: list[str], kind: str, params: dict, layout: 
 def simulate_stitched(stitched: pd.DataFrame, panel: pd.DataFrame, market: pd.DataFrame,
                       start: str | None = None) -> dict:
     """Exact simulation on the stitched OOS predictions + same-window benchmarks."""
+    from .pipeline import benchmark_tickers
+
+    rs = config.research_settings()
     start = start or str(stitched["date"].min().date())
-    spy = market[market["ticker"] == "SPY"].set_index("date")["close"].sort_index()
-    ex_f, ex_c = S.research.book_exclude_families, S.research.book_exclude_categories
+    primary, small = benchmark_tickers()
+    spy = market[market["ticker"] == primary].set_index("date")["close"].sort_index()
+    ex_f, ex_c = rs.book_exclude_families, rs.book_exclude_categories
     base = simulate.SimConfig(name="", prob_col="wf_score", min_prob=0.5, max_positions=S.strategy.max_positions,
                               hold_days=S.strategy.hold_days)
     cfgs = [simulate.replace(base, name="wf_model_top5", exclude_families=ex_f, exclude_categories=ex_c),
@@ -107,7 +111,7 @@ def simulate_stitched(stitched: pd.DataFrame, panel: pd.DataFrame, market: pd.Da
         curves.append(eq.rename("equity").rename_axis("date").reset_index().assign(strategy=cfg.name))
     end = panel["date"].max()
     cap = S.strategy.initial_capital
-    bench = [simulate.buy_and_hold(market, "SPY", start, end, cap), simulate.buy_and_hold(market, "IWM", start, end, cap),
+    bench = [simulate.buy_and_hold(market, primary, start, end, cap), simulate.buy_and_hold(market, small, start, end, cap),
              simulate.momentum_baseline(panel, start, end, cap)]
     benchmarks = []
     for b in bench:

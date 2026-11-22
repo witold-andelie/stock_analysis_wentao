@@ -362,8 +362,14 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   and arm A; US 10m, DE EUR 5m keeping the US 5:1 ratio — ASSUMPTION). `build_all` / `ticker_features` /
   `rolling_window.prior_strength` / `arm_flags` take them as parameters (defaults = the US values); `transform_de`
   passes the German ones. Live: 7,993 German events (breakouts 7,394, crashes 581; large 2,809 / mid 4,217 / small 967).
-- ⬜ **R7.4 Detecting German Breakouts** (remaining: research on the German events — pooled with US or separate,
-  decided on VALIDATION) requires **membership_history (de)** and feeds **Transforming**. It is the
+- ✅ **R7.4d Market-aware Research** (`config.research_settings()`, `pipeline.benchmark_tickers()`,
+  `de_pipeline.research_de`; `python -m driftrev.de_pipeline --research [--tune]`): **Researching** requires the active
+  **Market**. Benchmarks are the market's `primary_benchmark` / `small_benchmark` (US SPY / IWM, DE DAX / SDAX), the
+  cap-aware **Cost Model** uses the market's bps (DE 10 / 20 / 35), and **Book Rules** come from
+  `RESEARCH_BY_MARKET` (US = the US VALIDATION decisions; DE = no exclusions until German VALIDATION decides). US
+  behaviour is unchanged (all US tests pass unchanged).
+- ⬜ **R7.4 Detecting German Breakouts** (remaining: decide the German book composition and pooled vs separate models
+  on German VALIDATION; publish German signals) requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
   rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or

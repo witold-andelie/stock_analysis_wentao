@@ -7,6 +7,7 @@ Values marked ASSUMPTION are judgement calls documented in the README.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,6 +39,8 @@ class Market:
     index_set: tuple[str, ...]
     cap_bucket_by_index: tuple[tuple[str, str], ...]
     benchmarks: tuple[tuple[str, str], ...]
+    primary_benchmark: str
+    small_benchmark: str
     cost_bps_one_way: tuple[tuple[str, float], ...]
     min_dollar_volume: float                     # 20-session average turnover in market currency
     breakout_min_median_turnover: float          # 20-session median turnover for breakout ranking
@@ -65,6 +68,8 @@ MARKETS: dict[str, Market] = {
         index_set=("sp500", "sp400", "sp600"),
         cap_bucket_by_index=(("sp500", "large"), ("sp400", "mid"), ("sp600", "small")),
         benchmarks=(("SPY", "spy"), ("IWM", "iwm"), ("MDY", "mdy")),
+        primary_benchmark="SPY",
+        small_benchmark="IWM",
         cost_bps_one_way=(("large", 8.0), ("mid", 15.0), ("small", 25.0)),
         min_dollar_volume=2e6,
         breakout_min_median_turnover=10e6,
@@ -81,6 +86,8 @@ MARKETS: dict[str, Market] = {
         index_set=("dax", "mdax", "sdax"),
         cap_bucket_by_index=(("dax", "large"), ("mdax", "mid"), ("sdax", "small")),
         benchmarks=(("^GDAXI", "dax"), ("^MDAXI", "mdax"), ("^SDAXI", "sdax")),
+        primary_benchmark="^GDAXI",
+        small_benchmark="^SDAXI",
         # ASSUMPTION (R7.1): Xetra event-day spreads; revisit in R7.4
         cost_bps_one_way=(("large", 10.0), ("mid", 20.0), ("small", 35.0)),
         # R7.4c owner decision (EUR 1m); breakout floor keeps the US 5:1 ratio (ASSUMPTION)
@@ -391,6 +398,21 @@ class Settings:
 
 
 SETTINGS = Settings()
+
+
+# Research settings per market. US = the production decisions above (US VALIDATION). DE book composition is
+# not decided on German VALIDATION yet (R7.4d): start with no exclusions.
+RESEARCH_BY_MARKET: dict[str, Research] = {
+    "us": SETTINGS.research,
+    "de": dataclasses.replace(SETTINGS.research, book_exclude_families=(), book_exclude_categories=()),
+}
+
+
+def research_settings(market: Market | None = None) -> Research:
+    """Research settings of `market` (default: the active MARKET, looked up at call time)."""
+    if market is None:
+        market = MARKET
+    return RESEARCH_BY_MARKET[market.code]
 
 
 def ensure_dirs() -> None:

@@ -43,10 +43,11 @@ def check_sklearn_version() -> dict:
 
     ver = sklearn.__version__
     major_minor = tuple(int(x) for x in ver.split(".")[:2] if x.isdigit())
-    tested = tuple(int(x) for x in config.SETTINGS.research.sklearn_max_tested.split("."))
+    rs = config.research_settings()
+    tested = tuple(int(x) for x in rs.sklearn_max_tested.split("."))
     ok = major_minor <= tested
     if not ok:
-        warnings.warn(f"scikit-learn {ver} is newer than the tested {config.SETTINGS.research.sklearn_max_tested}.x: "
+        warnings.warn(f"scikit-learn {ver} is newer than the tested {rs.sklearn_max_tested}.x: "
                       "RandomForest probabilities (and so thresholds / trade counts) may differ", RuntimeWarning, stacklevel=2)
     import lightgbm
     import xgboost
@@ -227,7 +228,7 @@ def choose_threshold(y: np.ndarray, p: np.ndarray, min_share: float = 0.05, date
 def fit_final(ml: pd.DataFrame, features: list[str], params: dict[str, dict], layout: str | None = None,
               max_trades_per_day: float | None = None) -> tuple[pd.DataFrame, dict]:
     """Validation pass (for thresholds) + refit on TRAIN+VALIDATION, predict every row."""
-    rs = config.SETTINGS.research
+    rs = config.research_settings()
     layout = layout or rs.model_layout
     max_trades_per_day = rs.max_trades_per_day if max_trades_per_day is None else max_trades_per_day
     known = ml[TARGET].notna()
@@ -310,7 +311,7 @@ def save_bundle(info: dict, features: list[str], name: str) -> None:
     members = info["ensemble_members"] if name == "ensemble" else [name]
     bundle = {"name": name, "features": features, "threshold": info["thresholds"][name],
               "models": {k: info["models"][k] for k in members}, "params": info["params"],
-              "layout": info.get("layout", "pooled"), "feature_set": config.SETTINGS.research.feature_set,
+              "layout": info.get("layout", "pooled"), "feature_set": config.research_settings().feature_set,
               "val_auc": info["val_auc"].get(name), "test_auc": info["test_auc"].get(name)}
     config.ensure_dirs()
     joblib.dump(bundle, config.ARTIFACTS_DIR / artifacts.MODEL)

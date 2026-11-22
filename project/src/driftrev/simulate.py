@@ -30,10 +30,12 @@ ONE_WAY = S.costs.bps_one_way / 1e4
 
 
 def one_way_cost(cap_bucket=None, cost_model: str | None = None, mult: float = 1.0) -> float:
-    """One-way cost as a fraction. cost_model 'cap' = cap-aware bps (config.CapCosts), 'flat' = Costs.bps_one_way."""
+    """One-way cost as a fraction. 'cap' uses market costs (US: CapCosts), 'flat' uses Costs.bps_one_way."""
     model = cost_model or ("cap" if S.cap_costs.enabled else "flat")
     if model == "flat":
         return ONE_WAY * mult
+    if model == "cap" and config.MARKET.code != "us":
+        return config.MARKET.cost_bps(cap_bucket) / 1e4 * mult
     return config.CapCosts(True, S.cap_costs.large, S.cap_costs.mid, S.cap_costs.small).bps(
         cap_bucket, S.costs.bps_one_way) / 1e4 * mult
 
@@ -313,8 +315,9 @@ def standard_strategies(prob_col: str, thr: float, exclude_families: tuple | Non
     """Model strategies share the configured book composition (research.book_exclude_*); the
     all-events benchmark, the single-family diagnostics and the rule-based guide arms do not."""
     st = S.strategy
-    ex_f = S.research.book_exclude_families if exclude_families is None else tuple(exclude_families)
-    ex_c = S.research.book_exclude_categories if exclude_categories is None else tuple(exclude_categories)
+    rs = config.research_settings()
+    ex_f = rs.book_exclude_families if exclude_families is None else tuple(exclude_families)
+    ex_c = rs.book_exclude_categories if exclude_categories is None else tuple(exclude_categories)
     raw = SimConfig(name="", prob_col=prob_col, min_prob=thr, max_positions=st.max_positions, hold_days=st.hold_days)
     base = replace(raw, exclude_families=ex_f, exclude_categories=ex_c)
     rule = replace(raw, prob_col="rw_prior_strength", min_prob=-1.0)   # arms rank by prior strength
