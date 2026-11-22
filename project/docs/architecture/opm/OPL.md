@@ -295,7 +295,7 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   uses `DATA_ROOT/de`, so each market has one DuckDB writer). **Scheduling** uses the active market's timezone and run
   time. **Running Pipeline** and **Scheduling** require an *implemented* **Market**: until R7.2 lands, *de* is refused
   with `MarketNotImplementedError` before any file is written (`tests/test_market.py`). [OPS/ING]
-- ⬜ **R7.2 Loading German Index Membership** requires **Public Sources (de)** (DAX / MDAX / SDAX constituent
+- 🟡 **R7.2 Loading German Index Membership** (R7.2a ✅ membership reconstruction; R7.2b ⬜ symbols, ISIN, prices) requires **Public Sources (de)** (DAX / MDAX / SDAX constituent
   pages and their change history) and yields **membership_history (de)** (ticker, ISIN, index, start, end), which
   **universe** requires. ISIN replaces the SEC CIK as the stable key; Yahoo serves Xetra prices as `<symbol>.DE`.
   The September 2021 index reform (DAX 30 → 40, MDAX 60 → 50) must be reconstructed. If history cannot be
@@ -306,6 +306,21 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   history page; SDAX moves are partly visible in the MDAX table (names going up or down). 🟡 so SDAX keeps a survivorship
   gap, like the S&P 600 before 2019-12. Yahoo has no prices for delisted names (Wirecard `WDI.DE`, Osram `OSR.DE`
   returned empty). Wikimedia rate-limits bursts (HTTP 429): use the REST page endpoint, a cache and pauses.
+  - ✅ **R7.2a Reconstructing German Membership** (`driftrev.de_membership`, `update_de_membership()` with
+    `DRIFTREV_MARKET=de`) requires the four Wikipedia pages (DAX, MDAX, SDAX, MDAX/Zusammensetzungshistorie) and the
+    Wikipedia redirect API, and yields **membership_history (de)** (company_key, name, index, start, end; end empty =
+    member). Change tables are read as a rowspan/colspan grid; SDAX events are derived from the MDAX table's
+    `SDAX` markers. Identity: union-find over redirect-resolved article titles and normalised names, plus the
+    evidenced aliases in `resources/de_aliases.csv`. Replay rules mirror R1 (adds before removals on a date; a first
+    removal means "member before coverage"; current-table dates seed missing open intervals; open intervals of
+    non-current names are dropped and reported as orphans). On the 2026-11-22 fixtures: 625 intervals; on 2026-11-20
+    exactly 40 / 50 / 70 members; one DAX/MDAX orphan left (Victoria, 2001); 62 SDAX orphans = names that left SDAX
+    for no other index (exit date unknown) — R7.2b closes them at the last Xetra trading day.
+  - ⬜ **R7.2b Resolving German Symbols and Prices** requires **membership_history (de)** and **Yahoo Finance** (search),
+    and yields **universe (de)** (company_key → Xetra `.DE` symbol, ISIN) and **prices (de)**. Source check
+    2026-11-22: Yahoo search finds most names (umlauts need `ae/oe/ue` spelling, e.g. Stroeer → `SAX.DE`; legal form
+    helps, `1&1 AG` → `1U1.DE`); delisted names missing on Xetra still have Hamburg prices (`WDI.HM`, `OSR.HM`,
+    `RKET.HM` from 2014) with tiny volume, so they need a price-source flag and must not drive the liquidity filter.
 - ✅ **R7.3 Loading German Market Series** (`driftrev.de_market`, `python -m driftrev.de_market` with `DRIFTREV_MARKET=de`;
   refuses any other market) requires **Public Sources (de)** and feeds **Acquiring**: DAX, MDAX and
   SDAX index levels as benchmarks for D(t,L), a volatility gauge and Bund yields for the regime monitor. [ING]

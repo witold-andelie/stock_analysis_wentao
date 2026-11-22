@@ -38,7 +38,8 @@ digraph SD6 {
     node [style="filled,dotted", fillcolor="#f2f2f2"];
     market   [shape=box, style=filled, fillcolor="#e6e6e6", label="Market\n(us | de: MIC, timezone, run time,\ncurrency, benchmarks, cost model,\nindex set, data dir)"];
     r71 [shape=ellipse, style=filled, fillcolor="#ead7ff", label="R7.1 Selecting Market ✓\n(config.Market + DRIFTREV_MARKET;\nUS default unchanged, de refused)"];
-    r72 [shape=ellipse, label="R7.2 Loading German Index Membership\n(DAX/MDAX/SDAX constituents + change\ntables; ISIN key; Yahoo .DE tickers)"];
+    r72 [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.2a Reconstructing German Membership ✓\n(driftrev.de_membership: change grids,\nredirect + alias identity, SDAX via MDAX markers)"];
+    r72b [shape=ellipse, label="R7.2b Resolving German Symbols & Prices\n(Yahoo search → .DE symbol, ISIN;\nHamburg prices for delisted names)"];
     r72o [shape=box, label="membership_history (de)\n(ticker, isin, index, start, end)"];
     r73 [shape=ellipse, style=filled, fillcolor="#cfe2ff", label="R7.3 Loading German Market Series ✓\n(driftrev.de_market: DAX/MDAX/SDAX levels,\nBundesbank 10y Bund; realised-vol proxy)"];
     r74 [shape=ellipse, label="R7.4 Detecting German Breakouts\n(price-only family first:\nrolling-window Variant B, EUR liquidity)"];
@@ -50,7 +51,7 @@ digraph SD6 {
 
   r71 -> market [dir=both];
   market -> acquiring [arrowhead=odot]; market -> signalling [arrowhead=odot];
-  srcs -> r72 [arrowhead=odot]; r72 -> r72o; r72o -> universe [arrowhead=odot];
+  srcs -> r72 [arrowhead=odot]; r72 -> r72o; r72o -> r72b [arrowhead=odot]; r72b -> universe [dir=both];
   srcs -> r73 [arrowhead=odot]; r73 -> acquiring [style=dashed];
   r72o -> r74 [arrowhead=odot]; r74 -> transforming [style=dashed];
   srcs -> r75 [arrowhead=odot]; r75 -> transforming [style=dashed];

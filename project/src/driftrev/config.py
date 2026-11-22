@@ -164,6 +164,15 @@ DE_RATE_SERIES = {
     "BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A": "bund10y",   # 10y Bund yield, daily, %
 }
 
+# R7.2 German index pages (Wikipedia REST HTML) and the API used to resolve redirects.
+DE_WIKI_PAGES = {
+    "dax": "https://de.wikipedia.org/api/rest_v1/page/html/DAX",
+    "mdax": "https://de.wikipedia.org/api/rest_v1/page/html/MDAX",
+    "sdax": "https://de.wikipedia.org/api/rest_v1/page/html/SDAX",
+    "mdax_history": "https://de.wikipedia.org/api/rest_v1/page/html/MDAX%2FZusammensetzungshistorie",
+}
+DE_WIKI_API = "https://de.wikipedia.org/w/api.php"
+
 
 @dataclass(frozen=True)
 class EventRule:
@@ -322,6 +331,16 @@ class Membership:
 
 
 @dataclass(frozen=True)
+class DeMembership:
+    """R7.2 German index membership (de_membership.py)."""
+
+    since_tolerance_days: int = 7     # current-table "seit" date vs reconstructed start: larger gaps are reported
+    wiki_rps: float = 0.2             # Wikimedia rate-limits bursts (HTTP 429 seen on 2026-11-22): one request / 5 s
+    cache_hours: float = 24.0         # page cache lifetime
+    redirect_batch: int = 50          # titles per redirect query (API maximum for normal clients)
+
+
+@dataclass(frozen=True)
 class Correction:
     threshold: float = 0.05           # SPY >= 5% below its running all-time high = correction (HW1 Q3)
 
@@ -350,6 +369,7 @@ class Settings:
     correction: Correction = field(default_factory=Correction)
     consensus: Consensus = field(default_factory=Consensus)
     realised_vol: RealisedVol = field(default_factory=RealisedVol)
+    de_membership: DeMembership = field(default_factory=DeMembership)
     random_state: int = 42
 
 
