@@ -31,14 +31,15 @@ def test_build_selected_notebook_only(selected_build):
     assert before == after
 
 
-def test_notebook_06_valid_and_unexecuted():
+def test_notebook_06_valid_and_error_free():
+    """The committed notebook is executed on the coordinator's German warehouse (like 00-05): outputs are allowed,
+    error outputs are not."""
     notebook = nbformat.read(NOTEBOOKS / GERMAN, as_version=4)
     nbformat.validate(notebook)
     cells = [cell for cell in notebook.cells if cell.cell_type == "code"]
     assert cells
     for cell in cells:
-        assert cell.outputs == []
-        assert cell.execution_count is None
+        assert not [out for out in cell.outputs if out.get("output_type") == "error"]
         ast.parse(cell.source)
 
     first = ast.parse(cells[0].source)
