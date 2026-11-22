@@ -379,8 +379,16 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   (`all_events_unconditional`) made CAGR 22.0 %, Sharpe 0.88. Guide arms: A −0.5 % (487 trades), B +0.5 % (17), C
   +0.5 % (9). **Reading:** the German ranking signal is weak (AUC ≈ 0.55) and does not beat the DAX; the VALIDATION
   threshold is too selective on TEST. TEST numbers are reported only, never used to choose.
-- ⬜ **R7.4 Detecting German Breakouts** (remaining: pooled US+DE model vs German-only, decided on German VALIDATION;
-  German signal publishing) requires **membership_history (de)** and feeds **Transforming**. It is the
+- ✅ **R7.4f Comparing Pooled and German-only Models** (`driftrev.research_pooled`, read-only on both warehouses):
+  four training sources × {LightGBM, RF}, scored on German VALIDATION (choose) and German TEST (report only), feature
+  set `cs_drop_market` restricted to features both markets have (+ `is_de` for pooled fits). Run 2026-11-22 (US 79,544
+  train events, DE 4,500): German-only LightGBM VAL AUC 0.534 / prec@top10 % 47.4 %; **pooled all US + DE LightGBM VAL
+  AUC 0.555 / 50.4 % (VALIDATION winner)**; pooled same families RF 0.540; US-only transfer RF 0.549. TEST AUCs are
+  0.544–0.551 for every variant (German-only LightGBM 0.549, pooled winner 0.544). **Reading:** the VALIDATION gain of
+  the pooled model (+0.021 AUC) is about 1.3 standard errors at n = 1,354 and does not show up on TEST; no variant gives
+  a material German edge. Production for `de` stays German-only (simpler, same TEST quality) until a richer German
+  signal (earnings, R7.5) is available; the pooled option remains reproducible with this module.
+- ⬜ **R7.4 Detecting German Breakouts** (remaining: German signal publishing and the daily German run) requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
   rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or
