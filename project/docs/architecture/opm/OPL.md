@@ -368,8 +368,19 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   cap-aware **Cost Model** uses the market's bps (DE 10 / 20 / 35), and **Book Rules** come from
   `RESEARCH_BY_MARKET` (US = the US VALIDATION decisions; DE = no exclusions until German VALIDATION decides). US
   behaviour is unchanged (all US tests pass unchanged).
-- ⬜ **R7.4 Detecting German Breakouts** (remaining: decide the German book composition and pooled vs separate models
-  on German VALIDATION; publish German signals) requires **membership_history (de)** and feeds **Transforming**. It is the
+- 📊 **First German research run (2026-11-22, `research_de(tune=True)`, 110 s; German-only models)**: 7,993 events,
+  split train 4,500 / validation 1,354 / test 2,096 (43 purged); base rate on TEST 38.8 %. Production model (best
+  VALIDATION AUC) LightGBM: VALIDATION AUC 0.534, TEST AUC 0.549, threshold 0.63 → only 11 TEST trades in the model
+  books (`model_top5` CAGR −0.5 %). VALIDATION model comparison winner: pooled + month/week dummies, random forest
+  (VAL AUC 0.551). VALIDATION composition study suggests **all families** (no exclusion), which confirms the empty German
+  book rules. Walk-forward (yearly refits from 2018, out-of-sample 2024-01-02..2026-11-20): OOS AUC 0.560, precision of
+  selected events 49.4 % vs 38.8 % base rate, 67 trades, CAGR 8.5 %, Sharpe 0.73, max drawdown −11.3 %, versus DAX
+  buy-and-hold CAGR 14.5 %, Sharpe 0.93 and the HW1 momentum top quintile CAGR 25.0 %. Buying every event
+  (`all_events_unconditional`) made CAGR 22.0 %, Sharpe 0.88. Guide arms: A −0.5 % (487 trades), B +0.5 % (17), C
+  +0.5 % (9). **Reading:** the German ranking signal is weak (AUC ≈ 0.55) and does not beat the DAX; the VALIDATION
+  threshold is too selective on TEST. TEST numbers are reported only, never used to choose.
+- ⬜ **R7.4 Detecting German Breakouts** (remaining: pooled US+DE model vs German-only, decided on German VALIDATION;
+  German signal publishing) requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
   rule either, so Variant A / Arm D remains out of scope. Whether German events are pooled with US events or
