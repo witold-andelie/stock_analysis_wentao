@@ -333,6 +333,12 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   `indicators.realised_vol` (annualised 20-session close-to-close vol, VIX scale) and `realised_vol_term`
   (20/60 ratio, the VIX/VIX3M analogue), windows in `config.RealisedVol`. Both are point-in-time and tested; they
   are wired into a German **Market Context** in R7.4. Nothing in `pipeline.py` calls this module yet.
+- ✅ **R7.4a Building German Market Context** (`driftrev.de_context.market_context_de`) requires the *de* **market** and
+  **macro** tables and yields **Market Context** under the *market-neutral column contract*: `spy_*` = the market's
+  primary benchmark (DAX), `iwm_*` = its small-cap benchmark (SDAX), `vix` / `vix_chg_5d` / `vix_term` = its volatility
+  gauge (DAX realised volatility, 20/60 sessions). Every column of the US **Market Context** exists (US-only concepts:
+  sector correlation and FRED rates, as NaN), plus `bund10y` (lagged one session), `bund10y_chg_20d`, `mdax_ret_20d`,
+  `mid_vs_large_20d`, `rv_20`, `rv_term`. `features.regime_table` runs on it unchanged. [TRF]
 - ⬜ **R7.4 Detecting German Breakouts** requires **membership_history (de)** and feeds **Transforming**. It is the
   first German event family because it needs prices only: the rolling-window Variant B state is computed against
   the German benchmark, with a liquidity floor in EUR (a `config.py` ASSUMPTION). Xetra has no cumulative-deviation
