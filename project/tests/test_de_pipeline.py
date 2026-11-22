@@ -255,7 +255,7 @@ def test_transform_de_writes_tables(de_env, monkeypatch):
     monkeypatch.setattr(de_market, "update_de_market", lambda: update("market"))
     monkeypatch.setattr(de_market, "update_de_rates", lambda: update("rates"))
     monkeypatch.setattr(de_membership, "update_de_membership", lambda refresh=False: update("membership", refresh=refresh))
-    monkeypatch.setattr(de_universe, "update_de_universe", lambda: update("universe"))
+    monkeypatch.setattr(de_universe, "update_de_universe", lambda refresh_search=False: update("universe"))
     monkeypatch.setattr(consensus, "update_consensus", update_consensus)
     report = de_pipeline.run_de(refresh=True)
     assert steps == [("market", {}), ("rates", {}), ("membership", {"refresh": True}), ("universe", {})]

@@ -248,7 +248,7 @@ def test_german_earnings_mapping(monkeypatch):
     monkeypatch.setattr(de_market, "update_de_market", lambda: {"step": "market"})
     monkeypatch.setattr(de_market, "update_de_rates", lambda: {"step": "rates"})
     monkeypatch.setattr(de_membership, "update_de_membership", lambda refresh=False: {"step": "membership"})
-    monkeypatch.setattr(de_universe, "update_de_universe", lambda: {"step": "universe"})
+    monkeypatch.setattr(de_universe, "update_de_universe", lambda refresh_search=False: {"step": "universe"})
     monkeypatch.setattr(consensus, "update_consensus", update_consensus)
     report = de_pipeline.ingest_de()
     assert calls == [["AAA.DE", "BBB.DE", "DDD.DE"]]

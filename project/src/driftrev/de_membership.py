@@ -369,8 +369,12 @@ def fetch_redirects(titles: Iterable[str]) -> dict:
 
 
 def update_de_membership(refresh: bool = False) -> dict:
-    """Reconstruct membership and replace only the active German warehouse table."""
+    """Reconstruct membership and replace only the active German warehouse table. Fetches the Wikipedia pages and the
+    redirect API at most every `FetchCadence.membership_refresh_days` unless `refresh`."""
     _require_de()
+    if store.table_exists(TABLE) and not store.fetch_due(
+            "de_membership", config.SETTINGS.fetch_cadence.membership_refresh_days, refresh):
+        return {"skipped": True, "reason": f"fetched {store.fetch_age_days('de_membership')}d ago", "table": TABLE}
     pages = fetch_pages(refresh=refresh)
     current = pd.concat([parse_current(pages[index], index) for index in INDEXES], ignore_index=True)
     dax = parse_changes(pages["dax"], "dax")
@@ -383,6 +387,7 @@ def update_de_membership(refresh: bool = False) -> dict:
     keys = resolve_keys(cells, redirects, load_aliases())
     membership, diag = build_de_membership(changes, current, keys)
     store.replace_table(TABLE, membership)
+    store.record_fetch("de_membership")
     counts = {key: len(value) if isinstance(value, list) else value
               for key, value in diag.items() if isinstance(value, (int, list))}
     return {"table": TABLE, **counts}

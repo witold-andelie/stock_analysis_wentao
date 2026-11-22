@@ -382,6 +382,15 @@ class Consensus:
 
 
 @dataclass(frozen=True)
+class FetchCadence:
+    """How often slowly-changing web sources are fetched. CI keeps only the warehouse between runs (not cache/), so the
+    last fetch time lives in the warehouse table `fetch_log`. Shared GitHub runner IPs get rate-limited: fetch rarely."""
+
+    membership_refresh_days: float = 7.0      # US + DE index-membership pages and the redirect API (quarterly reviews)
+    symbol_search_refresh_days: float = 90.0  # re-search a known German company's Yahoo listing after this long
+
+
+@dataclass(frozen=True)
 class Settings:
     event: EventRule = field(default_factory=EventRule)
     target: Target = field(default_factory=Target)
@@ -398,6 +407,7 @@ class Settings:
     realised_vol: RealisedVol = field(default_factory=RealisedVol)
     de_membership: DeMembership = field(default_factory=DeMembership)
     de_universe: DeUniverse = field(default_factory=DeUniverse)
+    fetch_cadence: FetchCadence = field(default_factory=FetchCadence)
     random_state: int = 42
 
 

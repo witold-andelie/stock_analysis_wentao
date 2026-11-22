@@ -377,7 +377,11 @@ def clip_removed_prices(tickers: list[str], intervals: dict[str, list]) -> dict:
 
 
 def update_membership(refresh: bool = False, price_batch: int = 80) -> dict:
-    """Incremental R1 load: change tables -> membership_history; removed names -> universe + prices."""
+    """Incremental R1 load: change tables -> membership_history; removed names -> universe + prices.
+    Runs at most every `FetchCadence.membership_refresh_days` (Wikipedia + EDGAR searches) unless `refresh`."""
+    if store.table_exists(TABLE) and not store.fetch_due(
+            "us_membership", config.SETTINGS.fetch_cadence.membership_refresh_days, refresh):
+        return {"skipped": True, "reason": f"fetched {store.fetch_age_days('us_membership')}d ago", "table": TABLE}
     uni = store.read_table("universe")
     if uni.empty:
         raise RuntimeError("load the universe first (universe.load_or_fetch)")
@@ -429,6 +433,7 @@ def update_membership(refresh: bool = False, price_batch: int = 80) -> dict:
         "recovered_with_sector": sum(1 for t in recovered if meta.get(t, {}).get("sector")),
         "yahoo_failed": len(price_rep["failed"]),
     }
+    store.record_fetch("us_membership")
     return report
 
 

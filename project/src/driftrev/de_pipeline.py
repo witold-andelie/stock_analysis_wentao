@@ -58,7 +58,7 @@ def ingest_de(refresh: bool = False) -> dict:
     _require_de()
     report = {"market": de_market.update_de_market(), "rates": de_market.update_de_rates()}
     report["membership"] = de_membership.update_de_membership(refresh=refresh)
-    report["universe"] = de_universe.update_de_universe()
+    report["universe"] = de_universe.update_de_universe(refresh_search=refresh)
     universe_de = store.read_table(de_universe.TABLE)
     symbols = universe_de.loc[universe_de["price_source"].eq("xetra"), "symbol"].dropna()
     report["consensus"] = consensus.update_consensus(sorted(set(symbols[symbols.ne("")])))
@@ -150,13 +150,15 @@ def main() -> None:
     ap.add_argument("--transform-only", action="store_true", help="reuse warehouse inputs without downloading")
     ap.add_argument("--research", action="store_true", help="train and backtest the transformed warehouse without downloading")
     ap.add_argument("--tune", action="store_true", help="re-run the research hyper-parameter grid search")
+    ap.add_argument("--refresh-sources", action="store_true",
+                    help="refetch index membership pages and Yahoo symbol searches now (normally at most weekly / 90 days)")
     args = ap.parse_args()
     _require_de()
     logging.basicConfig(level=logging.INFO)
     if args.research:
         report = research_de(tune=args.tune)
     else:
-        report = event_summary(transform_de()["events"]) if args.transform_only else run_de()
+        report = event_summary(transform_de()["events"]) if args.transform_only else run_de(refresh=args.refresh_sources)
     print(json.dumps(report, indent=2, default=str))
 
 

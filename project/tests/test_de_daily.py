@@ -129,7 +129,7 @@ def test_run_pipeline_de_update_mode_uses_de_loaders(de_env, daily_stubs, monkey
     data = de_pipeline.transform_de()
     calls = []
 
-    def ingest():
+    def ingest(refresh=False):
         calls.append("ingest_de")
         return {"german_inputs": True}
 

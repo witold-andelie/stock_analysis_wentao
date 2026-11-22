@@ -163,20 +163,42 @@ def search_yahoo(query: str) -> list[dict] | None:
         return None
 
 
+SEARCH_TABLE = "yahoo_search_de"
+
+
+def _load_search_table() -> pd.DataFrame:
+    """Stored searches (warehouse table, so they survive CI runs); a legacy JSON cache is imported once."""
+    legacy = config.CACHE_DIR / "yahoo_search_de.json"
+    if legacy.exists() and not store.table_exists(SEARCH_TABLE):
+        old = json.loads(legacy.read_text(encoding="utf-8"))
+        rows = [{"query": q, "quotes_json": json.dumps(v, ensure_ascii=False), "fetched_at": pd.Timestamp.now()}
+                for q, v in old.items() if v is not None]
+        if rows:
+            store.upsert(SEARCH_TABLE, pd.DataFrame(rows), ["query"])
+    return store.read_table(SEARCH_TABLE)
+
+
 def cached_search(queries: Iterable[str], refresh: bool = False) -> dict[str, list | None]:
-    """Cache successful queries (including empty results), retrying failed fetches."""
+    """Search Yahoo only for queries never searched, older than `FetchCadence.symbol_search_refresh_days`, or all when
+    `refresh`. Successful results (including empty lists) are stored; failed fetches (None) are retried next time."""
     de_market._require_de()
-    path = config.CACHE_DIR / "yahoo_search_de.json"
-    cache = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    cache = {query: quotes for query, quotes in cache.items() if quotes is not None}
-    results = {}
+    table = _load_search_table()
+    max_age = pd.Timedelta(days=config.SETTINGS.fetch_cadence.symbol_search_refresh_days)
+    now = pd.Timestamp.now()
+    known = {} if table.empty else {
+        r.query: (json.loads(r.quotes_json), pd.Timestamp(r.fetched_at)) for r in table.itertuples(index=False)}
+    results, new_rows = {}, []
     for query in dict.fromkeys(queries):
-        quotes = search_yahoo(query) if refresh or query not in cache else cache[query]
+        hit = known.get(query)
+        if hit is not None and not refresh and now - hit[1] <= max_age:
+            results[query] = hit[0]
+            continue
+        quotes = search_yahoo(query)
         results[query] = quotes
         if quotes is not None:
-            cache[query] = quotes
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            new_rows.append({"query": query, "quotes_json": json.dumps(quotes, ensure_ascii=False), "fetched_at": now})
+    if new_rows:
+        store.upsert(SEARCH_TABLE, pd.DataFrame(new_rows), ["query"])
     return results
 
 

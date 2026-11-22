@@ -283,14 +283,14 @@ def test_cached_search_uses_cache(de_env, monkeypatch):
         patch.setattr(de_universe, "search_yahoo", fake_search)
         assert de_universe.cached_search(iter(["a", "b", "a"])) == {"a": [], "b": []}
         assert calls == ["a", "b"]
-        path = config.CACHE_DIR / "yahoo_search_de.json"
-        assert path.is_file()
-        assert json.loads(path.read_text(encoding="utf-8")) == {"a": [], "b": []}
+        # stored in the warehouse table (survives CI runs), not in cache/
+        stored = store.read_table(de_universe.SEARCH_TABLE)
+        assert {r.query: json.loads(r.quotes_json) for r in stored.itertuples()} == {"a": [], "b": []}
         calls.clear()
         assert de_universe.cached_search(["a", "b"]) == {"a": [], "b": []}
         assert calls == []
         assert de_universe.cached_search(["failed"]) == {"failed": None}
-        assert "failed" not in json.loads(path.read_text(encoding="utf-8"))
+        assert "failed" not in set(store.read_table(de_universe.SEARCH_TABLE)["query"])
         de_universe.cached_search(["failed"])
         assert calls == ["failed", "failed"]
         calls.clear()

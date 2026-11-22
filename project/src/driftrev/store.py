@@ -95,6 +95,38 @@ def max_date_by(name: str, key: str, date_col: str = "date") -> dict[str, pd.Tim
 
 
 # --------------------------------------------------------------------------------------
+# Fetch log: when was a slowly-changing web source last fetched (survives CI runs with the warehouse)
+# --------------------------------------------------------------------------------------
+FETCH_LOG = "fetch_log"
+
+
+def record_fetch(source: str, when: pd.Timestamp | None = None) -> None:
+    when = pd.Timestamp.now() if when is None else pd.Timestamp(when)
+    upsert(FETCH_LOG, pd.DataFrame({"source": [source], "fetched_at": [when]}), ["source"])
+
+
+def last_fetch(source: str) -> pd.Timestamp | None:
+    if not table_exists(FETCH_LOG):
+        return None
+    with connect() as con:
+        row = con.execute(f"select max(fetched_at) from {FETCH_LOG} where source = ?", [source]).fetchone()
+    return pd.Timestamp(row[0]) if row and row[0] is not None else None
+
+
+def fetch_due(source: str, max_age_days: float, force: bool = False) -> bool:
+    """True if forced, never fetched, or the last fetch is older than `max_age_days`."""
+    if force:
+        return True
+    last = last_fetch(source)
+    return last is None or (pd.Timestamp.now() - last) > pd.Timedelta(days=max_age_days)
+
+
+def fetch_age_days(source: str) -> float | None:
+    last = last_fetch(source)
+    return None if last is None else round((pd.Timestamp.now() - last).total_seconds() / 86400, 1)
+
+
+# --------------------------------------------------------------------------------------
 # HTTP
 # --------------------------------------------------------------------------------------
 class RateLimiter:

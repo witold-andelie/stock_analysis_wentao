@@ -67,6 +67,14 @@ Status tags: ✅ implemented · 🟡 implemented with a known limitation · ⬜ 
   and affects **consensus_eps** (release timestamp, EPS estimate, reported EPS, surprise %). It is incremental
   (tickers refreshed in the last 7 days are skipped) and tolerates rate limits, so coverage is partial by design. ✅
 
+- **Respecting Fetch Cadence** (`config.FetchCadence`, warehouse table `fetch_log`): sources that change a few times a
+  quarter are fetched at most every 7 days — US and DE index-membership pages, the Wikipedia redirect API and the US
+  removed-name EDGAR searches — and a known German company's Yahoo symbol search is repeated only after 90 days (results
+  in the warehouse table `yahoo_search_de`). CI keeps only the warehouse between runs, so the fetch state lives there,
+  not in `cache/`. `--refresh-sources` forces a refetch. Daily incremental sources (prices, market series, rates,
+  EDGAR submissions, pageviews; consensus EPS with its own 7-day rule) are unchanged. Reason: shared GitHub runner IPs
+  get rate-limited (owner decision 2026-11-22). [ING] ✅
+
 ## SD2 · Transforming in-zoomed (`SD2_transforming.dot`)
 
 Invariant: a value on row *t* uses only information available by the close of *t*. The exceptions

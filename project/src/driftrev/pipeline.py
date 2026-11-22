@@ -60,10 +60,10 @@ SNAP_FILES = ("events", "panel", "market", "universe", "ctx")
 # --------------------------------------------------------------------------------------
 # Step 1: ingest
 # --------------------------------------------------------------------------------------
-def ingest(refresh_universe: bool = False) -> dict:
+def ingest(refresh_universe: bool = False, refresh_sources: bool = False) -> dict:
     uni = universe.load_or_fetch(refresh=refresh_universe or not store.table_exists("universe"))
     report = {"universe": len(uni)}
-    report["membership"] = membership.update_membership()     # R1: change tables, removed names, their prices
+    report["membership"] = membership.update_membership(refresh=refresh_sources)  # R1: at most weekly (FetchCadence)
     uni = universe.load_or_fetch()                             # now includes removed names (is_current_member=False)
     cur = uni[uni["is_current_member"].fillna(True).astype(bool)] if "is_current_member" in uni else uni
     report["universe"] = len(uni)
@@ -439,7 +439,7 @@ def regime_block(ctx: pd.DataFrame) -> dict:
 # --------------------------------------------------------------------------------------
 # Orchestrator
 # --------------------------------------------------------------------------------------
-def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False) -> dict:
+def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False, refresh_sources: bool = False) -> dict:
     config.require_implemented_market()
     if config.MARKET.code == "de" and mode == "file":
         raise ValueError("mode 'file' is not supported for market 'de' yet")
@@ -451,14 +451,14 @@ def run_pipeline(mode: str = "update", retrain: bool = False, tune: bool = False
             from . import de_pipeline
 
             if mode == "update":
-                steps["ingest"] = de_pipeline.ingest_de()
+                steps["ingest"] = de_pipeline.ingest_de(refresh=refresh_sources)
                 data = de_pipeline.transform_de()
             elif mode == "warehouse":
                 data = de_pipeline.load_from_warehouse_de()
             else:
                 raise ValueError(f"unknown mode {mode!r}")
         elif mode == "update":
-            steps["ingest"] = ingest()
+            steps["ingest"] = ingest(refresh_sources=refresh_sources)
             data = transform()
         elif mode == "file":
             data = load_snapshot()
@@ -509,12 +509,14 @@ def main() -> None:
     ap.add_argument("--mode", default="update", choices=["update", "file", "warehouse"])
     ap.add_argument("--retrain", action="store_true", help="refit models and recompute all backtests")
     ap.add_argument("--tune", action="store_true", help="re-run the hyper-parameter grid search")
+    ap.add_argument("--refresh-sources", action="store_true",
+                    help="refetch slowly-changing web sources now (index membership pages, symbol searches)")
     a = ap.parse_args()
     config.require_implemented_market()
     if a.command == "snapshot":
         print(export_snapshot())
         return
-    print(json.dumps(run_pipeline(a.mode, a.retrain, a.tune), indent=2))
+    print(json.dumps(run_pipeline(a.mode, a.retrain, a.tune, refresh_sources=a.refresh_sources), indent=2))
 
 
 if __name__ == "__main__":
