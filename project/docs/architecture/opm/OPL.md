@@ -334,6 +334,10 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
     exactly 40 / 50 / 70 members; one DAX/MDAX orphan left (Victoria, 2001); 62 SDAX orphans = names that left SDAX
     for no other index (exit date unknown). Their open SDAX intervals stay dropped: closing them at the last Xetra
     trading day was considered but is **not implemented** (R7.2b resolves symbols and prices only).
+    *Year-end check (notebook 06, 2026-11-23):* DAX shows 29 members 2014–2021 instead of 30 — Linde AG / Linde plc are
+    not matched as one company (no evidenced alias). SDAX is overstated early: 58 members on 2014-12-31 vs 50, because a
+    name whose first SDAX event is a move up to MDAX gets the `start_unknown` start (47 of the 58). Both are documented
+    limitations; no fix without a better source.
   - ✅ **R7.2b Resolving German Symbols and Prices** (`driftrev.de_universe.update_de_universe()`) requires
     **membership_history (de)** and **Yahoo Finance** (search, cached) and yields **universe (de)** (company_key, symbol,
     exchange, `price_source` xetra | hamburg | other, `resolved_by` search | override | unresolved, latest index and cap

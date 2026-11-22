@@ -426,7 +426,7 @@ DRIFTREV_SNAPSHOT_URL=https://github.com/witold-andelie/stock_analysis_wentao/re
   python -m driftrev.pipeline --mode file --retrain
 
 python -m pytest tests -q && ruff check .                   # 236 tests, lint
-jupyter notebook notebooks/                                 # 00 … 05, executed with outputs
+jupyter notebook notebooks/                                 # 00 … 06, executed with outputs (06 needs data/de)
 
 # Docker: api :8000, mcp :8001, dashboard :8501, scheduler. Set DRIFTREV_API_TOKEN in .env first.
 docker compose up -d --build
@@ -462,7 +462,7 @@ project/
                   models · walkforward · simulate · analysis                                                           (research)
                   signals · pipeline · artifacts · report · housekeeping · notify                                      (signalling + ops)
                   api · service · security · mcp_server · agent_tools · broker · scheduler                             (serving / execution)
-  notebooks/      00 end-to-end · 01 data & EDA · 02 modeling · 03 simulation & analysis · 04 rolling-window guide · 05 research improvements
+  notebooks/      00 end-to-end · 01 data & EDA · 02 modeling · 03 simulation & analysis · 04 rolling-window guide · 05 research improvements · 06 German extension
   dashboard/  agent/  deploy/  docs/architecture/opm/  docs/REPRODUCIBILITY_AUDIT.md  scripts/  tests/ (236)
   Dockerfile · docker-compose.yml · requirements{,-runtime,-dev}.txt · ruff.toml · .env.example
 ../.github/workflows/   ci.yml · daily.yml · image.yml · cleanup.yml
@@ -496,7 +496,11 @@ project/
   the SPY benchmark includes dividends (conservative for the strategy).
 * **Small samples:** about 100–150 trades per test strategy, and bootstrap CIs of the mean trade include zero.
 * **German extension** ([§15](#15-extension-german-equities-on-xetra)):
-  - SDAX has no full change-history table. Only 38 of ~50 members are reconstructed for 2014.
+  - SDAX has no full change-history table. Only 38 of ~50 members have usable price history for 2014. The
+    reconstructed SDAX count is also overstated early on (58 members on 2014-12-31 vs 50 in the index): a name whose
+    first SDAX event is a move up to MDAX is assumed to have been a member since inception (47 of those 58).
+  - Linde is missing from the DAX history (29 instead of 30 members, 2014–2021): Linde AG and Linde plc are not
+    matched as one company, and no evidenced alias exists yet.
     The 62 SDAX orphans have unknown exit dates; their open SDAX intervals are dropped (not closed at a guessed date).
   - 21 delisted companies have no Yahoo prices on any German venue, leaving survivorship bias.
   - Yahoo earnings timestamps appear one session late for ~9% of releases. Correcting them from prices
@@ -509,17 +513,17 @@ project/
 
 | Criterion | Where |
 |---|---|
-| Problem description, context, new problem definition, step-by-step findings | §1, §2, §5–§8; notebooks 01–05 |
+| Problem description, context, new problem definition, step-by-step findings | §1, §2, §5–§8; notebooks 01–05; German extension in notebook 06 (§15) |
 | Lecture data + 20+ new features with descriptions | §3, §4 (YF/FRED + ~250 new features) |
-| New data source (not YF/FRED) | SEC EDGAR filings, XBRL and filing text; Wikimedia pageviews; Wikipedia constituents and history; Bundesbank API, German Wikipedia + redirect API (§15); Yahoo search is an additional Yahoo use |
+| New data source (not YF/FRED) | SEC EDGAR filings, XBRL and filing text; Wikimedia pageviews; Wikipedia constituents and history; Bundesbank API, German Wikipedia + redirect API (§15, notebook 06); Yahoo search is an additional Yahoo use |
 | Dataset > 1M records | 11.9M raw records; 4.84M-row daily panel |
-| Combined dataframe, feature sets, ≥ 5 new transformations, EDA | `features.build_all`, `dataset.py`, notebook 01, §5; shared multi-market feature pipeline (§15) |
-| Lecture models, several models, custom decision rules, tuning, new models | §6, `models.py`, `research.py`, notebook 02; German-only and pooled US + DE comparison (§15) |
+| Combined dataframe, feature sets, ≥ 5 new transformations, EDA | `features.build_all`, `dataset.py`, notebook 01, §5; shared multi-market feature pipeline (§15, notebook 06) |
+| Lecture models, several models, custom decision rules, tuning, new models | §6, `models.py`, `research.py`, notebook 02; German-only and pooled US + DE comparison (§15, notebook 06) |
 | Vector sims, ≥ 2 strategies, exact sims with reinvestment | §7, `simulate.py`, notebook 03 |
-| Profitability vs benchmark (CAGR, Sharpe, DD, rolling returns) | §2, notebook 03; walk-forward in notebook 05; German research vs DAX (§15) |
+| Profitability vs benchmark (CAGR, Sharpe, DD, rolling returns) | §2, notebook 03; walk-forward in notebook 05; German research vs DAX (§15, notebook 06) |
 | Advanced risk management, new strategies | §7 (regime pause, R framework, max positions, long-short, capacity rule) |
 | Exceptional profitability vs SPY | **not claimed**: after removing survivorship bias the strategies do not beat SPY (§2); the German strategy does not beat the DAX (§15) |
-| Deep analysis by family / size / year / regime / cause, debug wrong predictions, ideas | §8, notebooks 03 and 05 |
+| Deep analysis by family / size / year / regime / cause, debug wrong predictions, ideas | §8, notebooks 03 and 05; German events and earnings-date alignment in notebook 06 (§15) |
 | Notebooks exported to scripts + one end-to-end notebook | `src/driftrev/*`, notebook 00 |
 | Dependencies managed | `requirements*.txt`, `.venv`, Dockerfile |
 | Cron re-run for the latest data | `run_daily.sh`, `crontab.example`, scheduler container, `daily.yml`; market-aware scheduler for Germany, no German daily CD job yet (§15) |
@@ -538,6 +542,7 @@ small caps: DAX 40 + MDAX 50 + SDAX 70 on Deutsche Börse Xetra, traded in EUR.
 Select it with `DRIFTREV_MARKET=de`. It uses `DATA_ROOT/de`; the US default keeps `DATA_ROOT` and its
 behaviour is unchanged. China A-shares are out of scope. The source and research record is
 [OPL R7](docs/architecture/opm/OPL.md#r7--german-equities-on-deutsche-börse-xetra).
+Notebook [06](notebooks/06_german_extension.ipynb) reads the German tables and research artifacts for an end-to-end review.
 
 **Data and point-in-time universe.** German Wikipedia supplies the DAX, MDAX and SDAX current tables
 and the DAX and MDAX change tables, including `MDAX/Zusammensetzungshistorie`.

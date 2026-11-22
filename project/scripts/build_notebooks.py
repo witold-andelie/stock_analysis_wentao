@@ -1,15 +1,19 @@
 """Generate the project notebooks from code (so they stay in sync with the modules).
 
     PYTHONPATH=src .venv/bin/python scripts/build_notebooks.py
+    PYTHONPATH=src .venv/bin/python scripts/build_notebooks.py 06
     .venv/bin/jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb
 """
 
+import os
+import sys
 from pathlib import Path
 
 import nbformat as nbf
 
 ROOT = Path(__file__).resolve().parents[1]
-NB = ROOT / "notebooks"
+NB = Path(os.environ.get("NB_OUT", ROOT / "notebooks")).expanduser()
+SELECTED = tuple(sys.argv[1:])
 SETUP = """import sys, warnings, json
 from pathlib import Path
 ROOT = Path.cwd().parent if Path.cwd().name == "notebooks" else Path.cwd()
@@ -20,6 +24,9 @@ pd.set_option("display.max_columns", 40); pd.set_option("display.width", 200)
 plt.rcParams.update({"figure.figsize": (11, 4.5), "axes.grid": True, "grid.alpha": 0.3})
 from driftrev import config, store, artifacts, dataset, features, models, simulate, analysis, pipeline
 print("data dir:", config.DATA_DIR)"""
+SETUP_DE = """import os
+os.environ["DRIFTREV_MARKET"] = "de"
+""" + SETUP
 
 
 def md(t):
@@ -31,6 +38,9 @@ def code(t):
 
 
 def write(name, cells):
+    if SELECTED and not name.startswith(SELECTED):
+        return
+    NB.mkdir(parents=True, exist_ok=True)
     nb = nbf.v4.new_notebook()
     nb.cells = cells
     nb.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3", "language": "python"}
@@ -341,4 +351,221 @@ wf"""),
     md("## 6 · Final strategies vs benchmarks after the improvements"),
     code("""pd.DataFrame(metrics.get("strategies", []) + metrics.get("benchmarks", []))[
     ["name", "cagr", "sharpe", "max_drawdown", "n_trades", "win_rate"]].sort_values("sharpe", ascending=False).round(3)"""),
+])
+
+# ------------------------------------------------------------------------------------
+write("06_german_extension.ipynb", [
+    md("""# 06 · The German extension
+
+## 1 · Scope
+
+The extension studies drift and reversal in DAX, MDAX and SDAX companies on Xetra.
+`DRIFTREV_MARKET=de` selects Germany and a separate data directory.
+This notebook reads existing tables and artifacts. It does not fetch data or fit models.
+"""),
+    code(SETUP_DE + """
+from IPython.display import display
+from driftrev import consensus, de_membership
+print("market:", config.MARKET)
+
+def table(name):
+    df = store.read_table(name)
+    if df.empty:
+        print(f"missing: {name}")
+    return df
+
+def frame(name):
+    df = artifacts.load_frame(name)
+    if df.empty:
+        print(f"missing: {name}")
+    return df"""),
+    md("""## 2 · Point-in-time universe
+
+Count members at each year end and at the latest stored market date.
+If market prices are missing, use today's date for the open membership intervals.
+The latest counts are shown beside the expected current index sizes.
+"""),
+    code("""membership = table("membership_history")
+market = table("market")
+latest_date = (pd.to_datetime(market["date"]).max().normalize() if not market.empty
+               else pd.Timestamp.now(tz="Europe/Berlin").tz_localize(None).normalize())
+if not membership.empty:
+    for col in ["start_date", "end_date"]:
+        membership[col] = pd.to_datetime(membership[col])
+    dates = pd.DatetimeIndex([f"{year}-12-31" for year in range(2014, 2026)]).union(
+        pd.DatetimeIndex([latest_date]))
+    counts = pd.DataFrame({date: de_membership.membership_on(membership, date)
+                           .groupby("index_code")["company_key"].nunique()
+                           for date in dates}).T.reindex(columns=config.MARKET.index_set).fillna(0).astype(int)
+    counts.index.name = "date"
+    display(counts)
+    counts.plot(marker="o", title="Point-in-time German index members")
+    plt.ylabel("Members"); plt.show()
+    print("latest date:", latest_date.date())
+    display(pd.DataFrame({"members": counts.loc[latest_date],
+                          "expected_current": pd.Series({"dax": 40, "mdax": 50, "sdax": 70})}))"""),
+    md("""SDAX history is partial. MDAX change rows reveal some SDAX moves, but not all exits.
+Open SDAX intervals for former members with unknown exit dates are dropped.
+This leaves survivorship bias in the early universe. See [OPL R7.2a](../docs/architecture/opm/OPL.md#r7--german-equities-on-deutsche-börse-xetra).
+"""),
+    md("""## 3 · Symbols and prices
+
+Show how symbols were resolved and which venues supply prices.
+Keep companies without a symbol visible.
+"""),
+    code("""universe = table("universe")
+prices_de = table("prices")
+if not universe.empty:
+    display(universe.groupby(["price_source", "resolved_by"], dropna=False).size().rename("companies").to_frame())
+    unresolved = universe["symbol"].isna() | universe["symbol"].fillna("").str.strip().eq("")
+    print("companies without a symbol:")
+    print(universe.loc[unresolved, ["company_key", "name"]].to_string(index=False))
+    if not prices_de.empty:
+        sources = universe.loc[~unresolved, ["symbol", "price_source"]].drop_duplicates("symbol")
+        price_sources = prices_de.merge(sources, left_on="ticker", right_on="symbol", how="left", validate="many_to_one")
+        display(price_sources.groupby("price_source", dropna=False).size().rename("price_rows").to_frame())"""),
+    md("""## 4 · Market context
+
+The shared column `spy_close` holds the DAX close here.
+`vix` holds annualised DAX realised volatility, not an implied volatility index.
+Regime shares count trading days.
+"""),
+    code("""context = table("market_ctx")
+if not context.empty:
+    context["date"] = pd.to_datetime(context["date"])
+    ctx = context.drop_duplicates("date").set_index("date").sort_index()
+    fig, ax = plt.subplots()
+    right = ax.twinx()
+    ctx["spy_close"].plot(ax=ax, color="tab:blue", label="DAX close")
+    ctx["vix"].plot(ax=right, color="tab:orange", label="DAX realised volatility")
+    ax.set_ylabel("DAX close"); right.set_ylabel("Annualised realised volatility")
+    right.grid(False); ax.legend(loc="upper left"); right.legend(loc="upper right")
+    ax.set_title("German market context"); plt.show()
+    display(ctx["regime_state"].value_counts(normalize=True, dropna=False).rename("share_of_days").to_frame())"""),
+    md("""## 5 · Events
+
+Count event families by year and events by size bucket.
+The hit rate uses only events with a known forward outcome.
+"""),
+    code("""events = table("events")
+if not events.empty:
+    display(pd.crosstab(events["event_family"], pd.to_datetime(events["date"]).dt.year))
+    display(events.groupby("cap_bucket", dropna=False).size().rename("events").to_frame())
+    known = events.loc[events["growth_future_10d"].notna()].copy()
+    if known.empty:
+        print("missing: events.growth_future_10d")
+    else:
+        known["hit"] = known["growth_future_10d"] >= 1.02
+        display(known.groupby("event_family").agg(n=("hit", "size"), share_at_least_2pct=("hit", "mean")))"""),
+    md("""## 6 · Earnings-date alignment check
+
+Map release timestamps to Xetra sessions using the market's local close.
+Use every mapped German release in the study period, including releases without a selected event.
+Compare absolute close-to-close returns around the mapped session using `.DE` prices only.
+Missing prices stay missing. Largest-move shares use complete windows and split ties equally.
+
+Moving a release to the day with the largest price change would use future prices to set its date.
+That would introduce look-ahead. This check diagnoses timing errors and leaves the timestamps unchanged.
+"""),
+    code("""consensus_eps = table("consensus_eps")
+session_dates = (context["date"] if not context.empty else
+                 market.loc[market["ticker"].eq("^GDAXI"), "date"] if not market.empty else [])
+sessions = pd.DatetimeIndex(session_dates).normalize().unique().sort_values()
+if len(sessions) == 0:
+    print("missing: Xetra sessions")
+elif not consensus_eps.empty and not prices_de.empty:
+    releases = consensus.release_session_dates(consensus_eps, sessions, config.MARKETS["de"])
+    releases = releases.loc[releases["ticker"].str.endswith(".DE", na=False)
+                            & releases["release_local"].ge(pd.Timestamp("2014-06-01", tz="Europe/Berlin"))].copy()
+    if releases.empty:
+        print("missing: mapped German releases from 2014-06-01")
+    else:
+        xetra = prices_de.loc[prices_de["ticker"].str.endswith(".DE", na=False)].copy()
+        xetra["date"] = pd.to_datetime(xetra["date"])
+        close = xetra.pivot_table(index="date", columns="ticker", values="close").reindex(sessions)
+        daily_abs = close.pct_change(fill_method=None).abs()
+        values = daily_abs.to_numpy()
+        rows = sessions.get_indexer(releases["date"])
+        cols = daily_abs.columns.get_indexer(releases["ticker"])
+        offsets = list(range(-2, 3))
+        windows = releases[["ticker", "date", "release_local"]].copy()
+        for offset in offsets:
+            positions = rows + offset
+            valid = (rows >= 0) & (positions >= 0) & (positions < len(sessions)) & (cols >= 0)
+            moves = np.full(len(windows), np.nan)
+            moves[valid] = values[positions[valid], cols[valid]]
+            windows[offset] = moves
+        moves = windows[offsets]
+        complete = moves.dropna()
+        largest = complete.eq(complete.max(axis=1), axis=0)
+        largest_share = largest.div(largest.sum(axis=1), axis=0).mean()
+        print("mapped .DE releases from 2014-06-01:", len(windows))
+        print("complete windows:", len(complete), "| incomplete windows:", len(windows) - len(complete))
+        if complete.empty:
+            print("missing: complete earnings return windows")
+        display(pd.DataFrame({"median_abs_daily_return": moves.median(), "n_returns": moves.count(),
+                              "largest_move_share": largest_share}).rename_axis("session_offset"))
+        hour_buckets = ["0–5", "6–8", "9–12", "13–17", "18–23"]
+        windows["berlin_release_hour"] = pd.cut(windows["release_local"].dt.hour,
+                                                bins=[-1, 5, 8, 12, 17, 23], labels=hour_buckets)
+        by_hour = windows.groupby("berlin_release_hour", observed=False)
+        print("median absolute daily returns by Berlin release hour:")
+        display(by_hour[offsets].median())
+        display(by_hour.size().rename("releases").to_frame())"""),
+    md("""## 7 · Research results
+
+Read the recorded production model and the model comparison's VALIDATION columns.
+TEST results are reported in the strategy table. They do not choose the model.
+The walk-forward chart uses saved equity and the DAX buy-and-hold curve when present.
+"""),
+    code("""metrics = artifacts.load_metrics()
+if not metrics:
+    print("missing: metrics.json")
+else:
+    if metrics.get("model"):
+        print(json.dumps(metrics["model"], indent=1, default=str))
+    else:
+        print("missing: metrics.model")
+comparison = frame("model_comparison.parquet")
+if not comparison.empty:
+    identifiers = [c for c in ["variant", "learner", "feature_set", "n_features"] if c in comparison]
+    display(comparison[identifiers + [c for c in comparison if c.startswith("val_")]])
+if metrics:
+    results = pd.DataFrame(metrics.get("strategies", []) + metrics.get("benchmarks", []))
+    if results.empty:
+        print("missing: metrics.strategies and metrics.benchmarks")
+    else:
+        display(results.reindex(columns=["name", "cagr", "sharpe", "max_drawdown", "n_trades"]))
+wfe = frame("walkforward_equity.parquet")
+if not wfe.empty:
+    wfe["date"] = pd.to_datetime(wfe["date"])
+    curves = wfe.pivot_table(index="date", columns="strategy", values="equity").sort_index()
+    names = ["wf_model_top5", "^GDAXI_buy_hold"]
+    for name in names:
+        if name not in curves:
+            print(f"missing: {name}")
+    present = [name for name in names if name in curves]
+    if present:
+        curves[present].plot(logy=True, title="Walk-forward equity against DAX buy-and-hold")
+        plt.ylabel("Equity (log scale)"); plt.show()"""),
+    md("""## 8 · Pooled US + DE comparison
+
+The comparison is read from the German artifacts directory.
+The winner is chosen on German VALIDATION. TEST is reported only.
+"""),
+    code("""pooled = frame("pooled_comparison.parquet")
+if not pooled.empty:
+    display(pooled[["variant", "learner", "n_train_us", "n_train_de", "val_auc", "val_prec_top10", "test_auc", "winner"]])
+else:
+    print("Create the comparison outside this notebook with:")
+    print(f'python -m driftrev.research_pooled --us-warehouse "{config.DATA_ROOT / "warehouse.duckdb"}" '
+          f'--de-warehouse "{config.WAREHOUSE}" --out "{config.ARTIFACTS_DIR / "pooled_comparison.parquet"}"')"""),
+    md("""## 9 · Readings
+
+The recorded German signal is weak. The strategy does not beat DAX buy-and-hold.
+Pooling US and German events changes results within noise. No German post-earnings drift is visible.
+Adding earnings does not improve the recorded walk-forward result.
+See [README §15](../README.md#15-extension-german-equities-on-xetra) and
+[OPL R7](../docs/architecture/opm/OPL.md#r7--german-equities-on-deutsche-börse-xetra) for the recorded numbers and limitations.
+"""),
 ])
