@@ -430,6 +430,8 @@ def select_targets(events: pd.DataFrame, filings: pd.DataFrame, done: set[str] |
     2022+ earnings 8-K Item 2.02 filings. `done` = accessions already stored with a final status."""
     done = done or set()
     cols = ["ticker", "date", "cik", "prev_date", "next_date", "event_family"]
+    if events.empty or filings.empty or not set(cols) <= set(events.columns):
+        return pd.DataFrame(columns=["accession", "cik", "form", "items", "accepted_et", "priority"])
     ev = events[cols]
     out = []
     crash = ev[ev["event_family"].isin(cfg.crash_families)]
@@ -539,6 +541,8 @@ def ingest(max_filings: int | None = None, include_earnings: bool = True, cfg: T
     t0 = time.time()
     ev = store.read_table("events")
     fl = store.read_table("filings")
+    if ev.empty or fl.empty:   # first run: `events` is built by the transform step that follows ingest
+        return {"targets": 0, "skipped": True, "reason": "no events yet; filing text starts on the next run"}
     done = done_accessions()
     targets = select_targets(ev, fl, done, cfg, include_earnings, max_filings)
     lm = load_lm()
