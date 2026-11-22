@@ -281,7 +281,7 @@ in **Run Artifacts** that expire, and in one rolling **Snapshot Release Asset**.
   nothing is deployed by this repository.
 - ⬜ **R6 Confirming Intraday Entry** feeds **Signalling** (guide Entry B with intraday bars).
 
-### R7 · German equities on Deutsche Börse Xetra, PLANNED
+### R7 · German equities on Deutsche Börse Xetra
 
 Scope: DAX 40 + MDAX 50 + SDAX 70 (160 names; large / mid / small like S&P 500 / 400 / 600), traded on Xetra
 in EUR. The US system stays the default and must behave exactly as today. All existing invariants hold per
@@ -293,12 +293,13 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   York; DE 18:30 Berlin, after the 17:30 Xetra close), currency, benchmarks, one-way cost per cap bucket (DE values are an
   ASSUMPTION to revisit in R7.4), index set with cap buckets, and its own data directory (*us* keeps `DATA_ROOT`, *de*
   uses `DATA_ROOT/de`, so each market has one DuckDB writer). **Scheduling** uses the active market's timezone and run
-  time. **Running Pipeline** and **Scheduling** require an *implemented* **Market**: until R7.2 lands, *de* is refused
-  with `MarketNotImplementedError` before any file is written (`tests/test_market.py`). [OPS/ING]
+  time. **Running Pipeline** and **Scheduling** require an *implemented* **Market** (`MarketNotImplementedError` before any
+  file is written). *de* was refused this way until R7.4g marked it implemented. [OPS/ING]
 - 🟡 **R7.2 Loading German Index Membership** (R7.2a ✅ membership; R7.2b ✅ symbols and prices; ISIN not stored) requires **Public Sources (de)** (DAX / MDAX / SDAX constituent
   pages and their change history) and yields **membership_history (de)** (ticker, ISIN, index, start, end), which
   **universe** requires. ISIN replaces the SEC CIK as the stable key; Yahoo serves Xetra prices as `<symbol>.DE`.
-  The September 2021 index reform (DAX 30 → 40, MDAX 60 → 50) must be reconstructed. If history cannot be
+  The September 2021 index reform (DAX 30 → 40, MDAX 60 → 50) must be reconstructed. *(As implemented in R7.2a/b the identity key is
+  `company_key` (redirect-resolved article title); ISIN is not stored.)* If history cannot be
   reconstructed, the gap is reported as survivorship bias exactly as in SD1. [ING]
   *Source check 2026-11-22:* DAX: current 40 + change table (en "DAX" 66 rows, de "DAX" § Zusammensetzungshistorie
   77 rows). MDAX: current 50 + full change table on de "MDAX/Zusammensetzungshistorie" (293 rows, 1994 → 2026; company
@@ -315,7 +316,8 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
     removal means "member before coverage"; current-table dates seed missing open intervals; open intervals of
     non-current names are dropped and reported as orphans). On the 2026-11-22 fixtures: 625 intervals; on 2026-11-20
     exactly 40 / 50 / 70 members; one DAX/MDAX orphan left (Victoria, 2001); 62 SDAX orphans = names that left SDAX
-    for no other index (exit date unknown) — R7.2b closes them at the last Xetra trading day.
+    for no other index (exit date unknown). Their open SDAX intervals stay dropped: closing them at the last Xetra
+    trading day was considered but is **not implemented** (R7.2b resolves symbols and prices only).
   - ✅ **R7.2b Resolving German Symbols and Prices** (`driftrev.de_universe.update_de_universe()`) requires
     **membership_history (de)** and **Yahoo Finance** (search, cached) and yields **universe (de)** (company_key, symbol,
     exchange, `price_source` xetra | hamburg | other, `resolved_by` search | override | unresolved, latest index and cap
@@ -340,7 +342,7 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   **macro** as series `bund10y` (re-pulled 60 days back, like FRED). The volatility gauge is
   `indicators.realised_vol` (annualised 20-session close-to-close vol, VIX scale) and `realised_vol_term`
   (20/60 ratio, the VIX/VIX3M analogue), windows in `config.RealisedVol`. Both are point-in-time and tested; they
-  are wired into a German **Market Context** in R7.4. Nothing in `pipeline.py` calls this module yet.
+  are wired into a German **Market Context** in R7.4a; the loaders run in `de_pipeline.ingest_de` (R7.4g).
 - ✅ **R7.4a Building German Market Context** (`driftrev.de_context.market_context_de`) requires the *de* **market** and
   **macro** tables and yields **Market Context** under the *market-neutral column contract*: `spy_*` = the market's
   primary benchmark (DAX), `iwm_*` = its small-cap benchmark (SDAX), `vix` / `vix_chg_5d` / `vix_term` = its volatility
@@ -419,7 +421,8 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   |return| is 2.31 % on the mapped session vs 1.08–1.47 % on the two sessions before and after, and the mapped session is
   the largest of the five in 42 %; releases stamped 18:00–23:59 Berlin (424, ~9 %) look one session late (the session
   before reacts as much), an accepted error because fixing it from prices would be look-ahead.
-  **Research with earnings (11,933 events: +4,170 earnings events):** production RF VAL AUC 0.528, TEST AUC 0.546;
+  **Research with earnings (11,933 events):** 4,197 earnings events (4,170 with a realised 10-day outcome); some former
+  crash / breakout days are now earnings days (earnings take priority), so the total rose by 3,940, not 4,197. production RF VAL AUC 0.528, TEST AUC 0.546;
   walk-forward OOS AUC 0.534, CAGR −1.2 %; `earnings_up` and `earnings_down` have the same 10-day hit rate (37.5 % vs
   36.0 %): **no German post-earnings drift** is visible with these features. The earnings families stay in the German
   dataset (VALIDATION composition keeps all families).

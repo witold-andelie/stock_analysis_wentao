@@ -146,7 +146,7 @@ def research_de(tune: bool = False, with_walkforward: bool = True) -> dict:
 
 def main() -> None:
     """Run ingestion and transformation, or transform/research the existing German warehouse."""
-    ap = argparse.ArgumentParser(description="German price-only event pipeline")
+    ap = argparse.ArgumentParser(description="German event pipeline (crash, breakout and earnings events)")
     ap.add_argument("--transform-only", action="store_true", help="reuse warehouse inputs without downloading")
     ap.add_argument("--research", action="store_true", help="train and backtest the transformed warehouse without downloading")
     ap.add_argument("--tune", action="store_true", help="re-run the research hyper-parameter grid search")

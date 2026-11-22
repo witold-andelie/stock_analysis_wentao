@@ -1,8 +1,7 @@
 # Drift or Reversal? An event-driven ML trading system for the S&P 1500
 
 Final project for the [Stock Markets Analytics Zoomcamp 2026](https://github.com/DataTalksClub/stock-markets-analytics-zoomcamp).
-Scope: **US equities**, and **German equities on Xetra** (DAX + MDAX + SDAX; roadmap R7, `DRIFTREV_MARKET=de`; see
-[`OPL.md`](docs/architecture/opm/OPL.md) for its status and research results).
+Scope: **US equities** and **German equities on Deutsche Börse Xetra** (DAX + MDAX + SDAX; `DRIFTREV_MARKET=de`), with the German extension documented in [§15](#15-extension-german-equities-on-xetra).
 
 > **The question, asked every evening for every S&P 1500 stock that just had an information shock:**
 > will the move **drift** (continue) or **revert** over the next 10 sessions, after costs?
@@ -37,6 +36,7 @@ leakage and accounting audit (§8).
 12. [Architecture (OPM) and repository layout](#12-architecture-opm-and-repository-layout)
 13. [Limitations](#13-limitations)
 14. [Evaluation-criteria map](#14-evaluation-criteria-map)
+15. [Extension: German equities on Xetra](#15-extension-german-equities-on-xetra)
 
 ---
 
@@ -357,7 +357,7 @@ python -m driftrev.filing_text ingest --max-seconds 1800  # continue the resumab
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (102 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
+| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (215 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
 | `daily.yml` | 22:30 ET Mon–Fri; Sunday retrain; manual | restore the warehouse from the Actions cache → `pipeline --mode update` → job summary, **GitHub Pages results site** (`index.html` with an SVG equity chart, `signals.json`, `metrics.json`), run artifact (30-day expiry), save cache, optional Telegram/webhook push; Sunday: snapshot Release asset |
 | `image.yml` | push on `project/**`; manual | build and push `ghcr.io/<owner>/driftrev` (`latest`, `sha-*`), then pull and check `/health` |
 | `cleanup.yml` | weekly; manual (dry-run) | delete Actions caches > 3 days (keeping the newest), artifacts and workflow runs > 30 days, and old snapshot assets |
@@ -425,7 +425,7 @@ python -m driftrev.pipeline --mode update --retrain --tune
 DRIFTREV_SNAPSHOT_URL=https://github.com/witold-andelie/stock_analysis_wentao/releases/download/data-snapshot/driftrev_snapshot.zip \
   python -m driftrev.pipeline --mode file --retrain
 
-python -m pytest tests -q && ruff check .                   # 102 tests, lint
+python -m pytest tests -q && ruff check .                   # 215 tests, lint
 jupyter notebook notebooks/                                 # 00 … 05, executed with outputs
 
 # Docker: api :8000, mcp :8001, dashboard :8501, scheduler. Set DRIFTREV_API_TOKEN in .env first.
@@ -463,10 +463,20 @@ project/
                   signals · pipeline · artifacts · report · housekeeping · notify                                      (signalling + ops)
                   api · service · security · mcp_server · agent_tools · broker · scheduler                             (serving / execution)
   notebooks/      00 end-to-end · 01 data & EDA · 02 modeling · 03 simulation & analysis · 04 rolling-window guide · 05 research improvements
-  dashboard/  agent/  deploy/  docs/architecture/opm/  docs/REPRODUCIBILITY_AUDIT.md  scripts/  tests/ (102)
+  dashboard/  agent/  deploy/  docs/architecture/opm/  docs/REPRODUCIBILITY_AUDIT.md  scripts/  tests/ (215)
   Dockerfile · docker-compose.yml · requirements{,-runtime,-dev}.txt · ruff.toml · .env.example
 ../.github/workflows/   ci.yml · daily.yml · image.yml · cleanup.yml
 ```
+
+| Extension module | What it does |
+|---|---|
+| [`de_membership.py`](src/driftrev/de_membership.py) | reconstructs German index membership from Wikipedia changes, redirects and evidenced aliases |
+| [`de_universe.py`](src/driftrev/de_universe.py) | resolves company names to Yahoo symbols and loads Xetra or regional prices |
+| [`de_market.py`](src/driftrev/de_market.py) | loads German index levels and Bundesbank Bund yields |
+| [`de_context.py`](src/driftrev/de_context.py) | builds German market context for the shared feature and regime code |
+| [`de_pipeline.py`](src/driftrev/de_pipeline.py) | ingests and transforms German data, then runs the shared research pipeline |
+| [`research_pooled.py`](src/driftrev/research_pooled.py) | compares German-only, pooled and US-transfer models on German events |
+| [`broker_ibkr.py`](src/driftrev/broker_ibkr.py) | bridges German signals to Interactive Brokers with paper and order guards |
 
 ## 13. Limitations
 
@@ -485,6 +495,14 @@ project/
 * **Execution:** daily bars only, with no partial fills or borrow costs. Strategy P&L is price-only, while
   the SPY benchmark includes dividends (conservative for the strategy).
 * **Small samples:** about 100–150 trades per test strategy, and bootstrap CIs of the mean trade include zero.
+* **German extension** ([§15](#15-extension-german-equities-on-xetra)):
+  - SDAX has no full change-history table. Only 38 of ~50 members are reconstructed for 2014.
+    The 62 SDAX orphans have unknown exit dates; their open SDAX intervals are dropped (not closed at a guessed date).
+  - 21 delisted companies have no Yahoo prices on any German venue, leaving survivorship bias.
+  - Yahoo earnings timestamps appear one session late for ~9% of releases. Correcting them from prices
+    would introduce look-ahead.
+  - There is no ad-hoc notice source, so German crashes have no filing-based cause taxonomy.
+  - The IBKR bridge is tested offline only. It has not been verified in a paper account.
 * Research and education only, not investment advice. Orders are paper-only and disabled by default.
 
 ## 14. Evaluation-criteria map
@@ -493,22 +511,138 @@ project/
 |---|---|
 | Problem description, context, new problem definition, step-by-step findings | §1, §2, §5–§8; notebooks 01–05 |
 | Lecture data + 20+ new features with descriptions | §3, §4 (YF/FRED + ~250 new features) |
-| New data source (not YF/FRED) | SEC EDGAR filings, XBRL and filing text; Wikimedia pageviews; Wikipedia constituents and history |
+| New data source (not YF/FRED) | SEC EDGAR filings, XBRL and filing text; Wikimedia pageviews; Wikipedia constituents and history; Bundesbank API, German Wikipedia + redirect API (§15); Yahoo search is an additional Yahoo use |
 | Dataset > 1M records | 11.9M raw records; 4.84M-row daily panel |
-| Combined dataframe, feature sets, ≥ 5 new transformations, EDA | `features.build_all`, `dataset.py`, notebook 01, §5 |
-| Lecture models, several models, custom decision rules, tuning, new models | §6, `models.py`, `research.py`, notebook 02 |
+| Combined dataframe, feature sets, ≥ 5 new transformations, EDA | `features.build_all`, `dataset.py`, notebook 01, §5; shared multi-market feature pipeline (§15) |
+| Lecture models, several models, custom decision rules, tuning, new models | §6, `models.py`, `research.py`, notebook 02; German-only and pooled US + DE comparison (§15) |
 | Vector sims, ≥ 2 strategies, exact sims with reinvestment | §7, `simulate.py`, notebook 03 |
-| Profitability vs benchmark (CAGR, Sharpe, DD, rolling returns) | §2, notebook 03; walk-forward in notebook 05 |
+| Profitability vs benchmark (CAGR, Sharpe, DD, rolling returns) | §2, notebook 03; walk-forward in notebook 05; German research vs DAX (§15) |
 | Advanced risk management, new strategies | §7 (regime pause, R framework, max positions, long-short, capacity rule) |
-| Exceptional profitability vs SPY | **not claimed**: after removing survivorship bias the strategies do not beat SPY (§2) |
+| Exceptional profitability vs SPY | **not claimed**: after removing survivorship bias the strategies do not beat SPY (§2); the German strategy does not beat the DAX (§15) |
 | Deep analysis by family / size / year / regime / cause, debug wrong predictions, ideas | §8, notebooks 03 and 05 |
 | Notebooks exported to scripts + one end-to-end notebook | `src/driftrev/*`, notebook 00 |
 | Dependencies managed | `requirements*.txt`, `.venv`, Dockerfile |
-| Cron re-run for the latest data | `run_daily.sh`, `crontab.example`, scheduler container, `daily.yml` |
-| Two regimes (file vs download) | `--mode file` / `--mode update` |
-| Incremental loading with storage outside GitHub | DuckDB warehouse, Actions cache, Release snapshot |
-| Bonus: code design | OPM model, module boundaries, 102 tests, ruff, CI, independent audit |
-| Bonus: broker API | `broker.py` (Alpaca paper, GTC brackets, order guard) |
+| Cron re-run for the latest data | `run_daily.sh`, `crontab.example`, scheduler container, `daily.yml`; market-aware scheduler for Germany, no German daily CD job yet (§15) |
+| Two regimes (file vs download) | US: `--mode file` / `--mode update`; DE: `--mode warehouse` / `--mode update`, no `file` mode (§15) |
+| Incremental loading with storage outside GitHub | DuckDB warehouse, Actions cache, Release snapshot; separate German data directory (§15) |
+| Bonus: code design | OPM model, module boundaries, shared multi-market pipeline, 215 tests, ruff, CI, independent audit |
+| Bonus: broker API | `broker.py` (Alpaca paper, GTC brackets, order guard); `broker_ibkr.py` (IBKR paper by default, offline-tested only; §15) |
 | Bonus: monitoring | dashboard, GitHub Pages site, Telegram/webhook notifications, REST/MCP agent interface |
 | Bonus: containerization | Dockerfile + docker-compose (4 services), GHCR image |
 | Bonus: cloud deployment | GitHub Actions daily CD + Pages; Cloud Run / Fly / Render templates |
+
+## 15. Extension: German equities on Xetra
+
+**Why and scope.** This extension tests the same drift-or-reversal question on German large, mid and
+small caps: DAX 40 + MDAX 50 + SDAX 70 on Deutsche Börse Xetra, traded in EUR.
+Select it with `DRIFTREV_MARKET=de`. It uses `DATA_ROOT/de`; the US default keeps `DATA_ROOT` and its
+behaviour is unchanged. China A-shares are out of scope. The source and research record is
+[OPL R7](docs/architecture/opm/OPL.md#r7--german-equities-on-deutsche-börse-xetra).
+
+**Data and point-in-time universe.** German Wikipedia supplies the DAX, MDAX and SDAX current tables
+and the DAX and MDAX change tables, including `MDAX/Zusammensetzungshistorie`.
+The parser expands rowspan/colspan grids. It infers SDAX moves from MDAX history rows marked `SDAX`.
+The Wikipedia redirect API resolves article titles. Company identity joins these titles and normalised
+names, with evidenced aliases in `resources/de_aliases.csv`. Current-table dates seed missing open
+membership intervals.
+The 2026-11-22 fixtures contain 625 intervals, with exactly 40 / 50 / 70 members on 2026-11-20.
+
+Cached Yahoo search and evidenced symbol overrides resolve names, with Xetra preferred over Hamburg.
+The 2026-11-22 run covers 201 companies since 2014: 180 resolved, including all 160 current members on
+Xetra. There are 21 delisted names without Yahoo prices on any German venue. Some other delisted names
+have Hamburg prices. Their liquidity is based on index membership because regional volume is not
+representative. They stay in event history; the German signal book contains only tradable `.DE` symbols.
+
+Yahoo supplies `.DE` prices, index levels (`^GDAXI`, `^MDAXI`, `^SDAXI`), earnings dates and estimated
+and reported EPS. The Bundesbank time-series API supplies the daily 10-year Bund yield.
+Yahoo does not supply VDAX-NEW or VSTOXX, so the volatility gauge uses realised DAX volatility.
+
+**Shared pipeline, market-aware settings.** German data uses the same `features.build_all`, models,
+simulations, signal publishing, reports and notifications. Settings follow the active market.
+TEST is reported only and never used to choose models or book rules.
+
+| Setting | US | Germany |
+|---|---|---|
+| Primary / small-cap benchmarks | SPY / IWM | DAX / SDAX; MDAX levels are also loaded |
+| Volatility gauge | VIX and VIX/VIX3M | annualised 20-session DAX realised volatility; 20/60-session ratio |
+| One-way costs, large / mid / small | US cap-aware costs (§1) | 10 / 20 / 35 bps (assumed) |
+| Event liquidity floor, average turnover | USD 2m | EUR 1m |
+| Breakout ranking floor, median turnover | USD 10m | EUR 5m (assumed) |
+| Local close | 16:00 New York | 17:30 Berlin |
+| Scheduled run | 22:30 New York | 18:30 Berlin |
+| Book rules | US VALIDATION decisions | no family or category exclusions; German VALIDATION keeps all families |
+| Broker | Alpaca | Interactive Brokers, IBIS exchange, EUR |
+
+The scheduler and daily pipeline support Germany. A German daily CD job is not set up yet.
+
+**Results (honest).** These runs were recorded on 2026-11-22. AUCs below are measured on German events.
+The price-event walk-forward uses yearly refits from 2018; its OOS period is 2024-01-02 → 2026-11-20.
+An em dash means the metric is not reported in R7 for that run.
+
+| Research run | VALIDATION AUC | TEST AUC | Walk-forward OOS AUC | TEST model book CAGR | Walk-forward CAGR |
+|---|---:|---:|---:|---:|---:|
+| German-only price events, LightGBM (7,993 events) | 0.534 | 0.549 | 0.560 | −0.5% | 8.5% |
+| Pooled US + DE, LightGBM (VALIDATION winner) | 0.555 | 0.544 | — | — | — |
+| German events with earnings, RF (11,933 events) | 0.528 | 0.546 | 0.534 | — | −1.2% |
+| DAX buy-and-hold, price-event OOS period | — | — | — | — | 14.5% |
+
+* The German signal is weak. In the price-event run, the VALIDATION threshold of 0.63 leaves only
+  11 TEST trades in the model books.
+* The German walk-forward strategy does not beat the DAX. Adding earnings does not improve it.
+* Pooling does not help beyond noise. The VALIDATION gain of +0.021 AUC is about 1.3 standard errors
+  at n = 1,354 and does not carry through to TEST. German production stays German-only.
+* No German post-earnings drift is visible with these features. The 10-day hit rates for `earnings_up`
+  and `earnings_down` are similar: 37.5% vs 36.0%.
+
+**Earnings-date alignment check.** Yahoo timestamps are converted from US Eastern time to Berlin.
+A release at or after 17:30 maps to the next session. Median absolute return is 2.31% on the mapped
+session, against 1.08–1.47% on the two sessions before and after. The mapped session has the largest
+move in 42% of the five-session windows. Releases stamped 18:00–23:59 Berlin (424, ~9%) appear one
+session late. This error is retained because shifting dates based on prices would introduce look-ahead.
+
+**Trading.** `service.broker_for_market()` routes German signals to the Interactive Brokers bridge.
+It requires TWS or IB Gateway. It does not connect unless `IBKR_ENABLED=true`. Paper mode is the default
+and accepts only a `DU…` account. Submission needs both `confirm=true` and `DRIFTREV_ALLOW_ORDERS=true`.
+The bracket has a DAY market BUY parent, intended for the next Xetra open when sent after the close,
+with a GTC take-profit limit and a GTC stop. Order references identify the symbol and signal date.
+Expiry closing sells long positions only and uses daily close-order references. It skips an already-open
+close order and requests cancellation of bracket exits before the SELL. A cancellation exception blocks
+the SELL; the code does not wait for cancellation acknowledgements.
+
+The bridge is **offline-tested only**, using a fake IB. Before any real use, verify these in a paper account:
+
+* IBIS contract qualification and permissions;
+* after-close DAY parent handling;
+* bracket acceptance after disconnect;
+* GTC child activation and sibling cancellation;
+* the cancellation-acknowledgement race before the expiry SELL.
+
+**How to run.** From `project/`, use the environment from §11 with `PYTHONPATH=src`.
+The first command downloads inputs and transforms them. Research reads the already-transformed warehouse.
+
+```bash
+# Download German inputs and build events, the daily panel and market context.
+DRIFTREV_MARKET=de python -m driftrev.de_pipeline
+
+# Rebuild from existing raw warehouse inputs, without downloading.
+DRIFTREV_MARKET=de python -m driftrev.de_pipeline --transform-only
+
+# Train and backtest the transformed warehouse; optionally rerun the tuning grid.
+DRIFTREV_MARKET=de python -m driftrev.de_pipeline --research
+DRIFTREV_MARKET=de python -m driftrev.de_pipeline --research --tune
+
+# Daily shared pipeline: download and transform, then publish signals and reports.
+DRIFTREV_MARKET=de python -m driftrev.pipeline --mode update
+
+# Reuse transformed tables, then publish signals and reports without downloading.
+DRIFTREV_MARKET=de python -m driftrev.pipeline --mode warehouse
+
+# Compare explicit US and German warehouses; write a separate comparison parquet.
+python -m driftrev.research_pooled \
+  --us-warehouse data/warehouse.duckdb \
+  --de-warehouse data/de/warehouse.duckdb \
+  --out data/de/artifacts/pooled_comparison.parquet
+```
+
+The pooled command uses the default directory paths shown above; adjust them if `DATA_ROOT` differs.
+It reads both warehouses without changing them. German `--mode file` is not supported.
