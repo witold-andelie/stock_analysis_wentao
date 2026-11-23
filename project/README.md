@@ -584,29 +584,32 @@ TEST is reported only and never used to choose models or book rules.
 The scheduler and daily pipeline support Germany. The GitHub Actions workflow `daily_de.yml` runs it after the
 Xetra close (17:30 UTC, Monday to Friday; Sunday retrain). The results site shows the US at the root and Germany under `/de/`.
 
-**Results (honest).** These runs were recorded on 2026-11-22. AUCs below are measured on German events.
-The price-event walk-forward uses yearly refits from 2018; its OOS period is 2024-01-02 → 2026-11-20.
+**Results (honest).** The price-event run was recorded on 2026-11-22, before Linde was restored to the
+DAX history. The other two runs were repeated on 2026-11-23 with Linde (data through 2026-11-20).
+AUCs below are measured on German events. The price-event walk-forward uses yearly refits from 2018;
+its OOS period is 2024-01-02 → 2026-11-20. The earnings-run walk-forward OOS period is 2022-01-03 → 2026-11-20.
 An em dash means the metric is not reported in R7 for that run.
 
 | Research run | VALIDATION AUC | TEST AUC | Walk-forward OOS AUC | TEST model book CAGR | Walk-forward CAGR |
 |---|---:|---:|---:|---:|---:|
 | German-only price events, LightGBM (7,993 events) | 0.534 | 0.549 | 0.560 | −0.5% | 8.5% |
-| Pooled US + DE, LightGBM (VALIDATION winner) | 0.555 | 0.544 | — | — | — |
-| German events with earnings, RF (11,933 events) | 0.528 | 0.546 | 0.534 | — | −1.2% |
+| Pooled US + DE on the earnings dataset, RF (VALIDATION winner) | 0.537 | 0.534 | — | — | — |
+| German events with earnings, RF (11,973 events) | 0.533 | 0.543 | 0.526 | — | −2.2% |
 | DAX buy-and-hold, price-event OOS period | — | — | — | — | 14.5% |
 
 * The German signal is weak. In the price-event run, the VALIDATION threshold of 0.63 leaves only
   11 TEST trades in the model books.
 * The German walk-forward strategy does not beat the DAX. Adding earnings does not improve it.
-* Pooling does not help beyond noise. The VALIDATION gain of +0.021 AUC is about 1.3 standard errors
-  at n = 1,354 and does not carry through to TEST. German production stays German-only.
+* Pooling does not help beyond noise. In the pooled comparison, the VALIDATION gain over German-only RF
+  (+0.020 AUC, 0.537 vs 0.517) is about 1.5 standard errors at n = 1,988. It does not carry through to TEST
+  (0.534 vs 0.533). German production stays German-only.
 * No German post-earnings drift is visible with these features. The 10-day hit rates for `earnings_up`
-  and `earnings_down` are similar: 37.5% vs 36.0%.
+  and `earnings_down` are similar: 37.4% vs 36.0%.
 
 **Earnings-date alignment check.** Yahoo timestamps are converted from US Eastern time to Berlin.
-A release at or after 17:30 maps to the next session. Median absolute return is 2.31% on the mapped
+A release at or after 17:30 maps to the next session. Median absolute return is 2.30% on the mapped
 session, against 1.08–1.47% on the two sessions before and after. The mapped session has the largest
-move in 42% of the five-session windows. Releases stamped 18:00–23:59 Berlin (424, ~9%) appear one
+move in 42% of the five-session windows. Releases stamped 18:00–23:59 Berlin (430, ~9%) appear one
 session late. This error is retained because shifting dates based on prices would introduce look-ahead.
 
 **Trading.** `service.broker_for_market()` routes German signals to the Interactive Brokers bridge.

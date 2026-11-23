@@ -420,6 +420,10 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   the pooled model (+0.021 AUC) is about 1.3 standard errors at n = 1,354 and does not show up on TEST; no variant gives
   a material German edge. Production for `de` stays German-only (simpler, same TEST quality) until a richer German
   signal (earnings, R7.5) is available; the pooled option remains reproducible with this module.
+  *Re-run 2026-11-23 (after the R7.2a swap fix, on the earnings dataset, data through 2026-11-20; DE train 6,943,
+  VALIDATION n = 1,988):* German-only RF VAL AUC 0.517 / LightGBM 0.512; VALIDATION winner pooled all US + DE RF
+  0.537 (prec@top10 % 43.9 %); TEST AUCs 0.514–0.539 for every variant (German-only RF 0.533, pooled winner 0.534).
+  Same reading: the pooled gain (+0.020, ≈ 1.5 standard errors) does not show up on TEST.
 - ✅ **R7.4g Running the German Day**: `run_pipeline` dispatches on **Market** (*de*: `update` = `de_pipeline.ingest_de` +
   `transform_de`, `warehouse` = `load_from_warehouse_de`, `file` refused), then shares training, publishing, report,
   housekeeping and notification; metrics and run log carry `market`. German **Signal Book** lists only tradable `.DE`
@@ -456,6 +460,10 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   walk-forward OOS AUC 0.534, CAGR −1.2 %; `earnings_up` and `earnings_down` have the same 10-day hit rate (37.5 % vs
   36.0 %): **no German post-earnings drift** is visible with these features. The earnings families stay in the German
   dataset (VALIDATION composition keeps all families).
+  *Re-run 2026-11-23 with Linde (`research_de(tune=True)`, data through 2026-11-20):* 11,973 events (train 6,943 /
+  validation 1,988 / test 2,997, 45 purged); consensus EPS for 155 of 171 Xetra symbols (5,378 releases); production RF
+  VAL AUC 0.533, TEST AUC 0.543; walk-forward OOS AUC 0.526, CAGR −2.2 %, 169 trades; hit rates `earnings_up` 37.4 % vs
+  `earnings_down` 36.0 %; alignment check: median |return| 2.30 % on the mapped session vs 1.08–1.47 %, largest in 42 %, 430 releases stamped 18:00–23:59 Berlin. Same reading.
 - 🟡 **R7.6 Trading on Xetra** (`driftrev.broker_ibkr`; owner decision: Interactive Brokers, `ib_async==2.1.0`, imported
   lazily) requires **Signal Book**, **Deutsche Börse Xetra** (IB exchange `IBIS`, EUR) and a running TWS / IB Gateway, and
   feeds **Serving**: `service.broker_for_market()` routes *us* → Alpaca, *de* → IBKR. Same public API and **Order Guard**
