@@ -347,7 +347,16 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
     also catches the 1999 MDAX removal of the old GEA AG (bought by Metallgesellschaft, today GEA Group), which closes
     GEA Group's MDAX interval in 1999; and the 2017 Metro split (old Metro AG renamed Ceconomy, new Metro AG listed)
     is read as one `Metro AG` key, so the new Metro's 2017 MDAX entry is a double add and Ceconomy gets an interval
-    from before coverage. In 2014–2016 the two errors cancel out. Not fixed yet: a fix needs date-scoped identities.
+    from before coverage. In 2014–2016 the two errors cancel out. Fixed by the event-level identities below.
+    ✅ *Event-level identities (2026-11-23):* `resources/de_event_identities.csv` (index, date, side, text,
+    company_key, evidence) assigns the key of single change-table events, overriding the name/link identity; every row
+    must match exactly one event, else the build fails. Rows: the 1999 MDAX removal of `GEA` → `GEA AG (1999)` (the old
+    GEA AG); the pre-split Metro events (DAX 1996-07-22 add, DAX and MDAX 2012-09-24) → `Ceconomy` (old Metro AG was
+    renamed Ceconomy on 2017-07-12; the new Metro AG listed on 2017-07-13), plus an alias `Ceconomy` → article
+    `Ceconomy`. Result (fixtures and live pages): 628 intervals; MDAX 50 / 60 / 50 and DAX 30 / 40 at every year-end
+    2014–2025; `double_add` and `double_remove` 1 each (were 2); GEA Group in MDAX 1996-11-18 → 2025-09-22, Ceconomy
+    in MDAX 2012-09-24 → 2018-09-24 (`CEC.DE`), new Metro AG 2017-09-18 → 2021-03-22. Universe unchanged in size
+    (202 companies, 181 resolved).
   - ✅ **R7.2b Resolving German Symbols and Prices** (`driftrev.de_universe.update_de_universe()`) requires
     **membership_history (de)** and **Yahoo Finance** (search, cached) and yields **universe (de)** (company_key, symbol,
     exchange, `price_source` xetra | hamburg | other, `resolved_by` search | override | unresolved, latest index and cap
@@ -424,6 +433,10 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   VALIDATION n = 1,988):* German-only RF VAL AUC 0.517 / LightGBM 0.512; VALIDATION winner pooled all US + DE RF
   0.537 (prec@top10 % 43.9 %); TEST AUCs 0.514–0.539 for every variant (German-only RF 0.533, pooled winner 0.534).
   Same reading: the pooled gain (+0.020, ≈ 1.5 standard errors) does not show up on TEST.
+  *Re-run 2026-11-23 after the MDAX fix (DE train 7,042, VALIDATION n = 1,999):* German-only LightGBM VAL AUC 0.537 /
+  RF 0.526; pooled all US + DE RF 0.552 (best AUC), LightGBM 0.541; the VALIDATION winner by rank of AUC and
+  prec@top10 % is now **German-only LightGBM** (0.537 / 43.7 %). TEST AUCs 0.515–0.540, German-only LightGBM 0.523.
+  Same reading: the best pooled gain (+0.015, ≈ 1 standard error) does not show up on TEST.
 - ✅ **R7.4g Running the German Day**: `run_pipeline` dispatches on **Market** (*de*: `update` = `de_pipeline.ingest_de` +
   `transform_de`, `warehouse` = `load_from_warehouse_de`, `file` refused), then shares training, publishing, report,
   housekeeping and notification; metrics and run log carry `market`. German **Signal Book** lists only tradable `.DE`
@@ -464,6 +477,11 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
   validation 1,988 / test 2,997, 45 purged); consensus EPS for 155 of 171 Xetra symbols (5,378 releases); production RF
   VAL AUC 0.533, TEST AUC 0.543; walk-forward OOS AUC 0.526, CAGR −2.2 %, 169 trades; hit rates `earnings_up` 37.4 % vs
   `earnings_down` 36.0 %; alignment check: median |return| 2.30 % on the mapped session vs 1.08–1.47 %, largest in 42 %, 430 releases stamped 18:00–23:59 Berlin. Same reading.
+  *Re-run 2026-11-23 after the MDAX fix (GEA Group restored):* 12,096 events (train 7,042 / validation 1,999 / test
+  3,008, 47 purged); production RF VAL AUC 0.534, TEST AUC 0.544; walk-forward (OOS 2022-01-03..2026-11-20) OOS AUC
+  0.525, CAGR +2.5 %, Sharpe 0.22, 229 trades, versus DAX buy-and-hold 9.4 % a year over the same period; hit rates
+  `earnings_up` 37.4 % vs `earnings_down` 36.2 %; alignment check unchanged. The walk-forward CAGR moving from −2.2 % to
+  +2.5 % with one restored company shows it is noise-level. Same reading.
 - 🟡 **R7.6 Trading on Xetra** (`driftrev.broker_ibkr`; owner decision: Interactive Brokers, `ib_async==2.1.0`, imported
   lazily) requires **Signal Book**, **Deutsche Börse Xetra** (IB exchange `IBIS`, EUR) and a running TWS / IB Gateway, and
   feeds **Serving**: `service.broker_for_market()` routes *us* → Alpaca, *de* → IBKR. Same public API and **Order Guard**

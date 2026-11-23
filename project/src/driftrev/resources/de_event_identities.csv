@@ -1,0 +1,5 @@
+index_code,date,side,text,company_key,evidence
+mdax,1999-09-20,removed,GEA,GEA AG (1999),"Old GEA AG (Bochum), acquired by Metallgesellschaft in 1999; not GEA Group (ex Metallgesellschaft, in MDAX 1996-11-18 to 2025-09-22)"
+dax,1996-07-22,added,Metro,Ceconomy,"Old Metro AG, renamed Ceconomy AG on 2017-07-12; the new Metro AG listed on 2017-07-13"
+dax,2012-09-24,removed,Metro,Ceconomy,"Old Metro AG, renamed Ceconomy AG on 2017-07-12; the new Metro AG listed on 2017-07-13; old Metro AG leaves DAX for MDAX"
+mdax,2012-09-24,added,Metro AG,Ceconomy,"Old Metro AG, renamed Ceconomy AG on 2017-07-12; the new Metro AG listed on 2017-07-13; old Metro AG enters MDAX from DAX"

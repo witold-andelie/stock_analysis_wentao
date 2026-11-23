@@ -357,7 +357,7 @@ python -m driftrev.filing_text ingest --max-seconds 1800  # continue the resumab
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (244 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
+| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (248 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
 | `daily.yml` | 22:30 ET Mon–Fri; Sunday retrain; manual | restore the warehouse from the Actions cache → `pipeline --mode update` → job summary, **GitHub Pages results site** (`index.html` with an SVG equity chart, `signals.json`, `metrics.json`), run artifact (30-day expiry), save cache, optional Telegram/webhook push; Sunday: snapshot Release asset |
 | `image.yml` | push on `project/**`; manual | build and push `ghcr.io/<owner>/driftrev` (`latest`, `sha-*`), then pull and check `/health` |
 | `cleanup.yml` | weekly; manual (dry-run) | delete Actions caches > 3 days (keeping the newest), artifacts and workflow runs > 30 days, and old snapshot assets |
@@ -425,7 +425,7 @@ python -m driftrev.pipeline --mode update --retrain --tune
 DRIFTREV_SNAPSHOT_URL=https://github.com/witold-andelie/stock_analysis_wentao/releases/download/data-snapshot/driftrev_snapshot.zip \
   python -m driftrev.pipeline --mode file --retrain
 
-python -m pytest tests -q && ruff check .                   # 244 tests, lint
+python -m pytest tests -q && ruff check .                   # 248 tests, lint
 jupyter notebook notebooks/                                 # 00 … 06, executed with outputs (06 needs data/de)
 
 # Docker: api :8000, mcp :8001, dashboard :8501, scheduler. Set DRIFTREV_API_TOKEN in .env first.
@@ -499,9 +499,6 @@ project/
   - SDAX has no full change-history table. Only 38 of ~50 members have usable price history for 2014. The
     reconstructed SDAX count is also overstated early on (58 members on 2014-12-31 vs 50 in the index): a name whose
     first SDAX event is a move up to MDAX is assumed to have been a member since inception (47 of those 58).
-  - MDAX is one member short in 2017–2024 (49 / 59 / 49 instead of 50 / 60 / 50). Two identity collisions cause
-    it: the 1999 removal of the old GEA AG closes GEA Group's interval, and the 2017 Metro / Ceconomy split is read
-    as one company. A fix needs date-scoped identities.
     The 62 SDAX orphans have unknown exit dates; their open SDAX intervals are dropped (not closed at a guessed date).
   - 21 delisted companies have no Yahoo prices on any German venue, leaving survivorship bias.
   - Yahoo earnings timestamps appear one session late for ~9% of releases. Correcting them from prices
@@ -530,7 +527,7 @@ project/
 | Cron re-run for the latest data | `run_daily.sh`, `crontab.example`, scheduler container, `daily.yml`; market-aware scheduler for Germany, no German daily CD job yet (§15) |
 | Two regimes (file vs download) | US: `--mode file` / `--mode update`; DE: `--mode warehouse` / `--mode update`, no `file` mode (§15) |
 | Incremental loading with storage outside GitHub | DuckDB warehouse, Actions cache, Release snapshot; separate German data directory (§15) |
-| Bonus: code design | OPM model, module boundaries, shared multi-market pipeline, 244 tests, ruff, CI, independent audit |
+| Bonus: code design | OPM model, module boundaries, shared multi-market pipeline, 248 tests, ruff, CI, independent audit |
 | Bonus: broker API | `broker.py` (Alpaca paper, GTC brackets, order guard); `broker_ibkr.py` (IBKR paper by default, offline-tested only; §15) |
 | Bonus: monitoring | dashboard, GitHub Pages site, Telegram/webhook notifications, REST/MCP agent interface |
 | Bonus: containerization | Dockerfile + docker-compose (4 services), GHCR image |
@@ -551,9 +548,13 @@ The parser expands rowspan/colspan grids. It infers SDAX moves from MDAX history
 The Wikipedia redirect API resolves article titles. Company identity joins these titles and normalised
 names, with evidenced aliases in `resources/de_aliases.csv`. Current-table dates seed missing open
 membership intervals.
-The 2026-11-22 fixtures contain 627 intervals, with exactly 40 / 50 / 70 members on 2026-11-20.
+The 2026-11-22 fixtures contain 628 intervals, with exactly 40 / 50 / 70 members on 2026-11-20.
 A same-day removal and addition of one company (Linde AG → Linde plc in 2017) is kept as one continuous
-membership. The DAX has 30 members at every year-end 2014–2020 and 40 from 2021.
+membership. Four evidenced rows in `resources/de_event_identities.csv` assign single change events to the
+right company where two companies share a name over time: the old GEA AG (left MDAX in 1999) vs GEA Group,
+and the old Metro AG (renamed Ceconomy in 2017) vs the new Metro AG. Each row must match exactly one event,
+or the build fails. At every year-end 2014–2025 the DAX has 30 / 40 members and the MDAX 50 / 60 / 50,
+as in the official index sizes.
 
 Cached Yahoo search and evidenced symbol overrides resolve names, with Xetra preferred over Hamburg.
 The 2026-11-23 run covers 202 companies since 2014: 181 resolved, including all 160 current members on
@@ -584,8 +585,9 @@ TEST is reported only and never used to choose models or book rules.
 The scheduler and daily pipeline support Germany. The GitHub Actions workflow `daily_de.yml` runs it after the
 Xetra close (17:30 UTC, Monday to Friday; Sunday retrain). The results site shows the US at the root and Germany under `/de/`.
 
-**Results (honest).** The price-event run was recorded on 2026-11-22, before Linde was restored to the
-DAX history. The other two runs were repeated on 2026-11-23 with Linde (data through 2026-11-20).
+**Results (honest).** The price-event run was recorded on 2026-11-22, before the DAX and MDAX history fixes
+(R7.2a). The other two runs were repeated on 2026-11-23 with the corrected DAX and MDAX history
+(data through 2026-11-20).
 AUCs below are measured on German events. The price-event walk-forward uses yearly refits from 2018;
 its OOS period is 2024-01-02 → 2026-11-20. The earnings-run walk-forward OOS period is 2022-01-03 → 2026-11-20.
 An em dash means the metric is not reported in R7 for that run.
@@ -593,18 +595,22 @@ An em dash means the metric is not reported in R7 for that run.
 | Research run | VALIDATION AUC | TEST AUC | Walk-forward OOS AUC | TEST model book CAGR | Walk-forward CAGR |
 |---|---:|---:|---:|---:|---:|
 | German-only price events, LightGBM (7,993 events) | 0.534 | 0.549 | 0.560 | −0.5% | 8.5% |
-| Pooled US + DE on the earnings dataset, RF (VALIDATION winner) | 0.537 | 0.534 | — | — | — |
-| German events with earnings, RF (11,973 events) | 0.533 | 0.543 | 0.526 | — | −2.2% |
+| Pooled US + DE on the earnings dataset, RF (best pooled VALIDATION AUC) | 0.552 | 0.529 | — | — | — |
+| German events with earnings, RF (12,096 events) | 0.534 | 0.544 | 0.525 | — | 2.5% |
 | DAX buy-and-hold, price-event OOS period | — | — | — | — | 14.5% |
+| DAX buy-and-hold, earnings-run OOS period | — | — | — | — | 9.4% |
 
 * The German signal is weak. In the price-event run, the VALIDATION threshold of 0.63 leaves only
   11 TEST trades in the model books.
 * The German walk-forward strategy does not beat the DAX. Adding earnings does not improve it.
-* Pooling does not help beyond noise. In the pooled comparison, the VALIDATION gain over German-only RF
-  (+0.020 AUC, 0.537 vs 0.517) is about 1.5 standard errors at n = 1,988. It does not carry through to TEST
-  (0.534 vs 0.533). German production stays German-only.
+  The earnings-run walk-forward CAGR moved from −2.2% to +2.5% when GEA Group's MDAX history was restored.
+  A change of that size from one company shows the figure is within noise.
+* Pooling does not help beyond noise. The best pooled VALIDATION AUC (0.552, all US + DE, RF) is 0.015
+  above the best German-only model (0.537, LightGBM), about 1 standard error at n = 1,999. Ranked on
+  VALIDATION AUC and precision@top10% together, German-only LightGBM wins. On TEST no variant stands out
+  (0.515–0.540). German production stays German-only.
 * No German post-earnings drift is visible with these features. The 10-day hit rates for `earnings_up`
-  and `earnings_down` are similar: 37.4% vs 36.0%.
+  and `earnings_down` are similar: 37.4% vs 36.2%.
 
 **Earnings-date alignment check.** Yahoo timestamps are converted from US Eastern time to Berlin.
 A release at or after 17:30 maps to the next session. Median absolute return is 2.30% on the mapped

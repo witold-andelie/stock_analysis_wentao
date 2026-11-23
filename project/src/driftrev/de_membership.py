@@ -7,6 +7,7 @@ names to redirect-resolved article titles, with evidence-backed manual aliases
 from resources/de_aliases.csv. Components prefer the smallest article title as
 their key; names without a linked identity retain a name key and are reported,
 never guessed. Symbol/ISIN resolution and price loading belong to R7.2b.
+Evidence-backed event-level identities separate companies that share historical cell names.
 
 Replay additions before removals on each date, opening and closing [start, end)
 intervals. A date with additions and removals for one identity is a continuation,
@@ -47,6 +48,7 @@ TABLE = "membership_history"
 INDEXES = ("dax", "mdax", "sdax")
 FOREVER = pd.Timestamp("1900-01-01")
 ALIASES_PATH = Path(__file__).parent / "resources" / "de_aliases.csv"
+EVENT_IDENTITIES_PATH = Path(__file__).parent / "resources" / "de_event_identities.csv"
 CHANGE_COLS = ["date", "removed_name", "removed_link", "removed_other",
                "added_name", "added_link", "added_other", "index_code"]
 CURRENT_COLS = ["index_code", "name", "link", "since"]
@@ -207,6 +209,13 @@ def load_aliases(path: Path = ALIASES_PATH) -> pd.DataFrame:
     return pd.read_csv(path, usecols=["alias_text", "canonical_title", "evidence"])
 
 
+def load_event_identities(path: Path = EVENT_IDENTITIES_PATH) -> pd.DataFrame:
+    """Read the manually evidenced identities for individual change events."""
+    identities = pd.read_csv(path, usecols=["index_code", "date", "side", "text", "company_key", "evidence"])
+    identities["date"] = pd.to_datetime(identities["date"])
+    return identities
+
+
 def resolve_keys(cells: Iterable[tuple[str | None, str | None]], redirects: dict[str, str],
                  aliases: pd.DataFrame) -> dict[tuple[str | None, str | None], str]:
     """Join name/article nodes and assign each component a deterministic key."""
@@ -248,12 +257,24 @@ def resolve_keys(cells: Iterable[tuple[str | None, str | None]], redirects: dict
 
 
 def build_de_membership(changes: pd.DataFrame, current: pd.DataFrame,
-                        keys: dict[tuple[str | None, str | None], str]) -> tuple[pd.DataFrame, dict]:
+                        keys: dict[tuple[str | None, str | None], str],
+                        event_identities: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict]:
     """Replay per-company index events and reconcile with current constituents."""
+    overrides = {}
+    if event_identities is not None:
+        for row in event_identities.itertuples(index=False):
+            count = 0
+            if row.index_code in INDEXES and row.side in ("added", "removed"):
+                names = changes.loc[changes["index_code"].eq(row.index_code)
+                                    & changes["date"].eq(row.date), f"{row.side}_name"]
+                count = names.dropna().map(name_key).eq(name_key(row.text)).sum()
+            if count != 1:
+                raise ValueError(f"Event identity row {row} matched {count} events; expected exactly one")
+            overrides[row.index_code, row.date, row.side, name_key(row.text)] = row.company_key
     out = []
     diag = {"rows": 0, "double_add": 0, "double_remove": 0, "current_without_events": 0,
             "start_unknown": [], "since_mismatch": [], "inconsistent_current": [], "orphans": [],
-            "same_day_swap": [],
+            "same_day_swap": [], "event_identity": [],
             "coverage_start": {}}
     tolerance = pd.Timedelta(days=config.SETTINGS.de_membership.since_tolerance_days)
     for index_code in INDEXES:
@@ -265,7 +286,13 @@ def build_de_membership(changes: pd.DataFrame, current: pd.DataFrame,
             for name, link, kind in ((row.added_name, row.added_link, 1),
                                      (row.removed_name, row.removed_link, -1)):
                 if name is not None:
-                    events.setdefault(keys[name, link], []).append((row.date, kind, name))
+                    side = "added" if kind == 1 else "removed"
+                    key = overrides.get((index_code, row.date, side, name_key(name)))
+                    if key is None:
+                        key = keys[name, link]
+                    else:
+                        diag["event_identity"].append((index_code, row.date, side, key))
+                    events.setdefault(key, []).append((row.date, kind, name))
         now = {keys[row.name, row.link]: (row.name, row.since)
                for row in current.loc[current["index_code"] == index_code].itertuples(index=False)}
         for key in sorted(set(events) | set(now)):
@@ -404,7 +431,7 @@ def update_de_membership(refresh: bool = False) -> dict:
         cells.extend(changes[[f"{side}_name", f"{side}_link"]].itertuples(index=False, name=None))
     redirects = load_redirects(fetch_redirects(link for _, link in cells if link))
     keys = resolve_keys(cells, redirects, load_aliases())
-    membership, diag = build_de_membership(changes, current, keys)
+    membership, diag = build_de_membership(changes, current, keys, event_identities=load_event_identities())
     store.replace_table(TABLE, membership)
     store.record_fetch("de_membership")
     counts = {key: len(value) if isinstance(value, list) else value

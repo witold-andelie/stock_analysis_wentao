@@ -49,7 +49,8 @@ def _load() -> tuple[pd.DataFrame, pd.DataFrame, dict, pd.DataFrame, dict]:
         cells.extend(changes[[f"{side}_name", f"{side}_link"]].itertuples(index=False, name=None))
     redirects = de_membership.load_redirects(json.loads((FIXTURES / "redirects.json").read_text(encoding="utf-8")))
     keys = de_membership.resolve_keys(cells, redirects, de_membership.load_aliases())
-    membership, diag = de_membership.build_de_membership(changes, current, keys)
+    membership, diag = de_membership.build_de_membership(
+        changes, current, keys, event_identities=de_membership.load_event_identities())
     return current, changes, keys, membership, diag
 
 
@@ -232,6 +233,101 @@ def test_same_day_swap_rule_synthetic():
     assert diag["start_unknown"] == [("sdax", "First")]
     assert diag["double_add"] == 2
     assert diag["double_remove"] == 2
+
+
+def test_event_identity_overrides_synthetic():
+    rows = [
+        ("2000-01-01", None, "Shared AG", "mdax"),
+        ("2000-01-02", "SHARED AG", None, "mdax"),
+        ("2000-01-03", "Shared AG", None, "mdax"),
+        ("2000-01-02", "SHARED AG", None, "dax"),
+    ]
+    changes = pd.DataFrame([
+        (pd.Timestamp(date), removed, None, None, added, None, None, index)
+        for date, removed, added, index in rows
+    ], columns=de_membership.CHANGE_COLS)
+    current = pd.DataFrame([
+        ("mdax", "Shared AG", None, pd.Timestamp("2000-01-04")),
+    ], columns=de_membership.CURRENT_COLS)
+    keys = {("Shared AG", None): "Shared", ("SHARED AG", None): "Shared"}
+    identities = pd.DataFrame([
+        ("mdax", pd.Timestamp("2000-01-02"), "removed", "shared", "Old Shared", "Separate old company"),
+    ], columns=["index_code", "date", "side", "text", "company_key", "evidence"])
+    before, before_diag = de_membership.build_de_membership(changes, current, keys)
+    membership, diag = de_membership.build_de_membership(changes, current, keys, event_identities=identities)
+
+    def intervals(frame: pd.DataFrame, key: str, index: str) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+        selected = frame.loc[frame["company_key"].eq(key) & frame["index_code"].eq(index)]
+        return list(selected[["start_date", "end_date"]].itertuples(index=False, name=None))
+
+    assert intervals(before, "Old Shared", "mdax") == []
+    assert intervals(before, "Shared", "mdax")[0] == (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02"))
+    assert before_diag["event_identity"] == []
+    assert intervals(membership, "Old Shared", "mdax") == [
+        (de_membership.FOREVER, pd.Timestamp("2000-01-02")),
+    ]
+    shared = intervals(membership, "Shared", "mdax")
+    assert len(shared) == 2
+    assert shared[0] == (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-03"))
+    assert shared[1][0] == pd.Timestamp("2000-01-04") and pd.isna(shared[1][1])
+    assert intervals(membership, "Shared", "dax") == [(de_membership.FOREVER, pd.Timestamp("2000-01-02"))]
+    assert diag["event_identity"] == [("mdax", pd.Timestamp("2000-01-02"), "removed", "Old Shared")]
+    with pytest.raises(ValueError, match="text='shared'.*matched 0 events"):
+        de_membership.build_de_membership(
+            changes, current, keys, event_identities=identities.assign(date=pd.Timestamp("1999-01-01")))
+    ambiguous = pd.concat([changes, changes.iloc[[1]]], ignore_index=True)
+    with pytest.raises(ValueError, match="text='shared'.*matched 2 events"):
+        de_membership.build_de_membership(ambiguous, current, keys, event_identities=identities)
+
+
+def test_gea_and_metro_identities():
+    current, changes, keys, membership, diag = _load()
+
+    def intervals(key: str, index: str) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+        rows = membership.loc[membership["company_key"].eq(key) & membership["index_code"].eq(index)]
+        return list(rows[["start_date", "end_date"]].itertuples(index=False, name=None))
+
+    assert intervals("GEA Group", "mdax") == [(pd.Timestamp("1996-11-18"), pd.Timestamp("2025-09-22"))]
+    gea_dax = intervals("GEA Group", "dax")
+    assert len(gea_dax) == 2
+    assert gea_dax[0] == (pd.Timestamp("1990-09-03"), pd.Timestamp("1996-11-18"))
+    assert gea_dax[1][0] == pd.Timestamp("2025-09-22") and pd.isna(gea_dax[1][1])
+    assert intervals("GEA AG (1999)", "mdax") == [(de_membership.FOREVER, pd.Timestamp("1999-09-20"))]
+    assert intervals("Ceconomy", "dax") == [(pd.Timestamp("1996-07-22"), pd.Timestamp("2012-09-24"))]
+    assert intervals("Ceconomy", "mdax") == [(pd.Timestamp("2012-09-24"), pd.Timestamp("2018-09-24"))]
+    assert intervals("Ceconomy", "sdax") == []
+    assert ("sdax", "Ceconomy") in diag["orphans"]
+    assert intervals("Metro AG", "dax") == []
+    assert intervals("Metro AG", "mdax") == [(pd.Timestamp("2017-09-18"), pd.Timestamp("2021-03-22"))]
+    _, before_diag = de_membership.build_de_membership(changes, current, keys)
+    assert diag["double_add"] == before_diag["double_add"] - 1
+    assert diag["double_remove"] == before_diag["double_remove"] - 1
+    assert len(diag["event_identity"]) == 4
+    assert set(diag["event_identity"]) == {
+        ("mdax", pd.Timestamp("1999-09-20"), "removed", "GEA AG (1999)"),
+        ("dax", pd.Timestamp("1996-07-22"), "added", "Ceconomy"),
+        ("dax", pd.Timestamp("2012-09-24"), "removed", "Ceconomy"),
+        ("mdax", pd.Timestamp("2012-09-24"), "added", "Ceconomy"),
+    }
+
+
+def test_mdax_year_end_counts():
+    _, _, _, membership, _ = _load()
+    for year in range(2014, 2026):
+        active = de_membership.membership_on(membership, f"{year}-12-31")
+        assert active["index_code"].eq("mdax").sum() == (60 if 2018 <= year <= 2020 else 50)
+
+
+def test_event_identities_resource_valid():
+    identities = de_membership.load_event_identities()
+    assert list(identities.columns) == ["index_code", "date", "side", "text", "company_key", "evidence"]
+    assert len(identities) == 4
+    assert identities["evidence"].notna().all()
+    assert identities["evidence"].str.strip().ne("").all()
+    assert identities["side"].isin(["added", "removed"]).all()
+    assert pd.to_datetime(identities["date"]).notna().all()
+    assert all(isinstance(date, pd.Timestamp) for date in identities["date"])
+    assert identities["index_code"].isin(de_membership.INDEXES).all()
 
 
 def test_linde_continuous_in_dax():
