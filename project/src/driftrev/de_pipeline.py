@@ -53,11 +53,14 @@ def german_earnings(cons: pd.DataFrame, sessions) -> dict[str, pd.DataFrame]:
             for ticker, rows in releases.groupby("ticker")}
 
 
-def ingest_de(refresh: bool = False) -> dict:
-    """Update German market series, rates, membership, universe, prices and consensus EPS."""
+def ingest_de(refresh: bool = False, refresh_membership: bool = False) -> dict:
+    """Update German market series, rates, membership, universe, prices and consensus EPS.
+
+    refresh_membership refetches membership pages without forcing symbol searches.
+    """
     _require_de()
     report = {"market": de_market.update_de_market(), "rates": de_market.update_de_rates()}
-    report["membership"] = de_membership.update_de_membership(refresh=refresh)
+    report["membership"] = de_membership.update_de_membership(refresh=refresh or refresh_membership)
     report["universe"] = de_universe.update_de_universe(refresh_search=refresh)
     universe_de = store.read_table(de_universe.TABLE)
     symbols = universe_de.loc[universe_de["price_source"].eq("xetra"), "symbol"].dropna()

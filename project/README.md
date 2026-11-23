@@ -347,7 +347,8 @@ python -m driftrev.filing_text ingest --max-seconds 1800  # continue the resumab
   - EDGAR re-reads only the recent block per company;
   - pageviews and consensus EPS are fetched from each series' last date;
   - SEC filing text resumes with a per-run time budget;
-  - membership is refreshed weekly.
+  - membership is refreshed weekly; `--refresh-membership` rebuilds it now (membership pages only, symbol searches
+    keep their cadence). `daily_de` has the same switch as the manual input `refresh_membership`.
 * **Cron:** `scripts/run_daily.sh` + `scripts/crontab.example` (22:30 New York, Mon–Fri), or the `scheduler`
   container. Every run is recorded in `run_log.jsonl`.
 * **One notebook runs the whole workflow:** `notebooks/00_end_to_end_workflow.ipynb` calls the `.py`
@@ -357,7 +358,7 @@ python -m driftrev.filing_text ingest --max-seconds 1800  # continue the resumab
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (248 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
+| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (253 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
 | `daily.yml` | 22:30 ET Mon–Fri; Sunday retrain; manual | restore the warehouse from the Actions cache → `pipeline --mode update` → job summary, **GitHub Pages results site** (`index.html` with an SVG equity chart, `signals.json`, `metrics.json`), run artifact (30-day expiry), save cache, optional Telegram/webhook push; Sunday: snapshot Release asset |
 | `image.yml` | push on `project/**`; manual | build and push `ghcr.io/<owner>/driftrev` (`latest`, `sha-*`), then pull and check `/health` |
 | `cleanup.yml` | weekly; manual (dry-run) | delete Actions caches > 3 days (keeping the newest), artifacts and workflow runs > 30 days, and old snapshot assets |
@@ -425,7 +426,7 @@ python -m driftrev.pipeline --mode update --retrain --tune
 DRIFTREV_SNAPSHOT_URL=https://github.com/witold-andelie/stock_analysis_wentao/releases/download/data-snapshot/driftrev_snapshot.zip \
   python -m driftrev.pipeline --mode file --retrain
 
-python -m pytest tests -q && ruff check .                   # 248 tests, lint
+python -m pytest tests -q && ruff check .                   # 253 tests, lint
 jupyter notebook notebooks/                                 # 00 … 06, executed with outputs (06 needs data/de)
 
 # Docker: api :8000, mcp :8001, dashboard :8501, scheduler. Set DRIFTREV_API_TOKEN in .env first.
@@ -527,7 +528,7 @@ project/
 | Cron re-run for the latest data | `run_daily.sh`, `crontab.example`, scheduler container, `daily.yml`; market-aware scheduler for Germany, no German daily CD job yet (§15) |
 | Two regimes (file vs download) | US: `--mode file` / `--mode update`; DE: `--mode warehouse` / `--mode update`, no `file` mode (§15) |
 | Incremental loading with storage outside GitHub | DuckDB warehouse, Actions cache, Release snapshot; separate German data directory (§15) |
-| Bonus: code design | OPM model, module boundaries, shared multi-market pipeline, 248 tests, ruff, CI, independent audit |
+| Bonus: code design | OPM model, module boundaries, shared multi-market pipeline, 253 tests, ruff, CI, independent audit |
 | Bonus: broker API | `broker.py` (Alpaca paper, GTC brackets, order guard); `broker_ibkr.py` (IBKR paper by default, offline-tested only; §15) |
 | Bonus: monitoring | dashboard, GitHub Pages site, Telegram/webhook notifications, REST/MCP agent interface |
 | Bonus: containerization | Dockerfile + docker-compose (4 services), GHCR image |

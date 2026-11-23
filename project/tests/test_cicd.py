@@ -90,6 +90,19 @@ def test_daily_de_caches_only_de_data():
             assert "if: success()" in step
 
 
+def test_daily_de_refresh_membership_input():
+    import yaml
+
+    text = _wf("daily_de.yml")
+    workflow = yaml.safe_load(text)
+    events = workflow["on"] if "on" in workflow else workflow[True]
+    refresh_membership = events["workflow_dispatch"]["inputs"]["refresh_membership"]
+    assert refresh_membership["type"] == "boolean"
+    assert refresh_membership["default"] is False
+    assert 'if [ "${{ inputs.refresh_membership }}" = "true" ]; then flags="$flags --refresh-membership"; fi' in text
+    assert "--refresh-membership" not in _wf("daily.yml")
+
+
 @pytest.mark.parametrize("name,own,other", [("daily.yml", "us", "de"), ("daily_de.yml", "de", "us")])
 @pytest.mark.parametrize("markets", [("us",), ("de",), ("us", "de")])
 def test_pages_site_composed_from_both_markets(name, own, other, markets, tmp_path):
