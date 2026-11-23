@@ -330,23 +330,33 @@ tunables live in `config.py`, orders stay paper by default behind the **Order Gu
     `SDAX` markers. Identity: union-find over redirect-resolved article titles and normalised names, plus the
     evidenced aliases in `resources/de_aliases.csv`. Replay rules mirror R1 (adds before removals on a date; a first
     removal means "member before coverage"; current-table dates seed missing open intervals; open intervals of
-    non-current names are dropped and reported as orphans). On the 2026-11-22 fixtures: 625 intervals; on 2026-11-20
+    non-current names are dropped and reported as orphans). On the 2026-11-22 fixtures: 627 intervals; on 2026-11-20
     exactly 40 / 50 / 70 members; one DAX/MDAX orphan left (Victoria, 2001); 62 SDAX orphans = names that left SDAX
     for no other index (exit date unknown). Their open SDAX intervals stay dropped: closing them at the last Xetra
     trading day was considered but is **not implemented** (R7.2b resolves symbols and prices only).
-    *Year-end check (notebook 06, 2026-11-23):* DAX shows 29 members 2014–2021 instead of 30 — Linde AG / Linde plc are
-    not matched as one company (no evidenced alias). SDAX is overstated early: 58 members on 2014-12-31 vs 50, because a
-    name whose first SDAX event is a move up to MDAX gets the `start_unknown` start (47 of the 58). Both are documented
-    limitations; no fix without a better source.
+    *Same-day identity swap (2026-11-23):* when one key has both an add and a removal on one date in one index, it is
+    a continuation (share-class or legal-form swap), counted in `same_day_swap`: an open interval stays open; with no
+    open interval it opens at the "member before coverage" start if the key has no earlier event, else at that date.
+    This fixes Linde: Linde AG and Linde plc both normalise to `linde` (one company), and the DAX row 25.10.2017 swaps
+    them; adds-before-removals used to turn that into a dropped zero-length interval, so Linde vanished from the DAX
+    (29 members in 2014–2020, 39 in 2021–2022). Now Linde is a DAX member from before coverage to 2023-02-27, and the
+    DAX has 30 / 40 members at every year-end 2014–2025. Swaps on the fixtures: Linde 2017 and Degussa 1999 / 2000.
+    *Year-end check (notebook 06, 2026-11-23):* SDAX is overstated early: 58 members on 2014-12-31 vs 50, because a
+    name whose first SDAX event is a move up to MDAX gets the `start_unknown` start (47 of the 58). 🟡 MDAX is one
+    short in 2017–2024 (49 / 59 / 49 instead of 50 / 60 / 50), from two identity collisions: the static `Gea` alias
+    also catches the 1999 MDAX removal of the old GEA AG (bought by Metallgesellschaft, today GEA Group), which closes
+    GEA Group's MDAX interval in 1999; and the 2017 Metro split (old Metro AG renamed Ceconomy, new Metro AG listed)
+    is read as one `Metro AG` key, so the new Metro's 2017 MDAX entry is a double add and Ceconomy gets an interval
+    from before coverage. In 2014–2016 the two errors cancel out. Not fixed yet: a fix needs date-scoped identities.
   - ✅ **R7.2b Resolving German Symbols and Prices** (`driftrev.de_universe.update_de_universe()`) requires
     **membership_history (de)** and **Yahoo Finance** (search, cached) and yields **universe (de)** (company_key, symbol,
     exchange, `price_source` xetra | hamburg | other, `resolved_by` search | override | unresolved, latest index and cap
     bucket, first/last membership date) and **prices (de)**. A Yahoo listing is accepted only if every token of its
     long or short name (legal forms removed) prefixes a token of the company's names; Xetra beats Hamburg. This rejects
     real look-alikes in the data (`Osram` → ams-OSRAM `DQW.DE`, `Siemens` → Siemens Energy, `Porsche AG` → `PAH3.DE`).
-    Evidenced manual rows live in `resources/de_symbol_overrides.csv`. Live run 2026-11-22: 201 companies since 2014,
-    180 resolved (163 Xetra by search, 8 Hamburg by search, 9 overrides), all 160 current members on Xetra, 517,588 price
-    rows. 🟡 21 delisted names have no Yahoo prices on any German venue (e.g. Axel Springer, Kuka, Innogy, Stada,
+    Evidenced manual rows live in `resources/de_symbol_overrides.csv`. Live run 2026-11-23 (after the swap fix): 202 companies since
+    2014, 181 resolved (164 Xetra by search, 8 Hamburg by search, 9 overrides; Linde plc → `LIN.DE` by search), all 160
+    current members on Xetra, 521,042 price rows. 🟡 21 delisted names have no Yahoo prices on any German venue (e.g. Axel Springer, Kuka, Innogy, Stada,
     Morphosys): a remaining survivorship gap. ISIN is not stored (not needed by any consumer yet). Source check
     2026-11-22: Yahoo search finds most names (umlauts need `ae/oe/ue` spelling, e.g. Stroeer → `SAX.DE`; legal form
     helps, `1&1 AG` → `1U1.DE`); delisted names missing on Xetra still have Hamburg prices (`WDI.HM`, `OSR.HM`,

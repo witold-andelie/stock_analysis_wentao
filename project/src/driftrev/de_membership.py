@@ -9,7 +9,10 @@ their key; names without a linked identity retain a name key and are reported,
 never guessed. Symbol/ISIN resolution and price loading belong to R7.2b.
 
 Replay additions before removals on each date, opening and closing [start, end)
-intervals. An initial removal implies membership from 1900-01-01 (SDAX starts
+intervals. A date with additions and removals for one identity is a continuation,
+preserving an open interval, opening one before coverage if unrecorded, or
+reopening at that date after a closed interval.
+An initial removal implies membership from 1900-01-01 (SDAX starts
 are reported as unknown). Duplicate events are counted; zero-length intervals
 are dropped, while short spin-off intervals are retained. Current-table dates
 seed missing open intervals without overlapping recorded history; conflicting
@@ -250,6 +253,7 @@ def build_de_membership(changes: pd.DataFrame, current: pd.DataFrame,
     out = []
     diag = {"rows": 0, "double_add": 0, "double_remove": 0, "current_without_events": 0,
             "start_unknown": [], "since_mismatch": [], "inconsistent_current": [], "orphans": [],
+            "same_day_swap": [],
             "coverage_start": {}}
     tolerance = pd.Timedelta(days=config.SETTINGS.de_membership.since_tolerance_days)
     for index_code in INDEXES:
@@ -266,13 +270,28 @@ def build_de_membership(changes: pd.DataFrame, current: pd.DataFrame,
                for row in current.loc[current["index_code"] == index_code].itertuples(index=False)}
         for key in sorted(set(events) | set(now)):
             evs = sorted(events.get(key, []), key=lambda event: (event[0], -event[1]))
+            kinds_by_date: dict[pd.Timestamp, set[int]] = {}
+            for date, kind, _ in evs:
+                kinds_by_date.setdefault(date, set()).add(kind)
+            swap_dates = {date for date, kinds in kinds_by_date.items() if len(kinds) == 2}
             intervals = []
             open_start = None
             recorded = False
             last_end = None
             identity = (index_code, key)
             for date, kind, _ in evs:
-                if kind == 1:
+                if date in swap_dates:
+                    diag["same_day_swap"].append((*identity, date))
+                    if open_start is None:
+                        open_start = date if recorded else FOREVER
+                        if not recorded:
+                            recorded = True
+                            if index_code == "sdax":
+                                diag["start_unknown"].append(identity)
+                    swap_dates.remove(date)
+                elif len(kinds_by_date[date]) == 2:
+                    continue
+                elif kind == 1:
                     if open_start is None:
                         open_start = date
                     else:

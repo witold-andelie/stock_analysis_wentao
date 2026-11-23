@@ -357,7 +357,7 @@ python -m driftrev.filing_text ingest --max-seconds 1800  # continue the resumab
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (236 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
+| `ci.yml` | push / PR on `project/**` | ruff lint, pytest (244 tests: API, core invariants, audit, retention, CI contract, dashboard render), every OPM diagram renders and has an OPL section, notebooks valid, `docker compose config`, `docker build` + import check |
 | `daily.yml` | 22:30 ET Mon–Fri; Sunday retrain; manual | restore the warehouse from the Actions cache → `pipeline --mode update` → job summary, **GitHub Pages results site** (`index.html` with an SVG equity chart, `signals.json`, `metrics.json`), run artifact (30-day expiry), save cache, optional Telegram/webhook push; Sunday: snapshot Release asset |
 | `image.yml` | push on `project/**`; manual | build and push `ghcr.io/<owner>/driftrev` (`latest`, `sha-*`), then pull and check `/health` |
 | `cleanup.yml` | weekly; manual (dry-run) | delete Actions caches > 3 days (keeping the newest), artifacts and workflow runs > 30 days, and old snapshot assets |
@@ -425,7 +425,7 @@ python -m driftrev.pipeline --mode update --retrain --tune
 DRIFTREV_SNAPSHOT_URL=https://github.com/witold-andelie/stock_analysis_wentao/releases/download/data-snapshot/driftrev_snapshot.zip \
   python -m driftrev.pipeline --mode file --retrain
 
-python -m pytest tests -q && ruff check .                   # 236 tests, lint
+python -m pytest tests -q && ruff check .                   # 244 tests, lint
 jupyter notebook notebooks/                                 # 00 … 06, executed with outputs (06 needs data/de)
 
 # Docker: api :8000, mcp :8001, dashboard :8501, scheduler. Set DRIFTREV_API_TOKEN in .env first.
@@ -499,8 +499,9 @@ project/
   - SDAX has no full change-history table. Only 38 of ~50 members have usable price history for 2014. The
     reconstructed SDAX count is also overstated early on (58 members on 2014-12-31 vs 50 in the index): a name whose
     first SDAX event is a move up to MDAX is assumed to have been a member since inception (47 of those 58).
-  - Linde is missing from the DAX history (29 instead of 30 members, 2014–2021): Linde AG and Linde plc are not
-    matched as one company, and no evidenced alias exists yet.
+  - MDAX is one member short in 2017–2024 (49 / 59 / 49 instead of 50 / 60 / 50). Two identity collisions cause
+    it: the 1999 removal of the old GEA AG closes GEA Group's interval, and the 2017 Metro / Ceconomy split is read
+    as one company. A fix needs date-scoped identities.
     The 62 SDAX orphans have unknown exit dates; their open SDAX intervals are dropped (not closed at a guessed date).
   - 21 delisted companies have no Yahoo prices on any German venue, leaving survivorship bias.
   - Yahoo earnings timestamps appear one session late for ~9% of releases. Correcting them from prices
@@ -529,7 +530,7 @@ project/
 | Cron re-run for the latest data | `run_daily.sh`, `crontab.example`, scheduler container, `daily.yml`; market-aware scheduler for Germany, no German daily CD job yet (§15) |
 | Two regimes (file vs download) | US: `--mode file` / `--mode update`; DE: `--mode warehouse` / `--mode update`, no `file` mode (§15) |
 | Incremental loading with storage outside GitHub | DuckDB warehouse, Actions cache, Release snapshot; separate German data directory (§15) |
-| Bonus: code design | OPM model, module boundaries, shared multi-market pipeline, 236 tests, ruff, CI, independent audit |
+| Bonus: code design | OPM model, module boundaries, shared multi-market pipeline, 244 tests, ruff, CI, independent audit |
 | Bonus: broker API | `broker.py` (Alpaca paper, GTC brackets, order guard); `broker_ibkr.py` (IBKR paper by default, offline-tested only; §15) |
 | Bonus: monitoring | dashboard, GitHub Pages site, Telegram/webhook notifications, REST/MCP agent interface |
 | Bonus: containerization | Dockerfile + docker-compose (4 services), GHCR image |
@@ -550,10 +551,12 @@ The parser expands rowspan/colspan grids. It infers SDAX moves from MDAX history
 The Wikipedia redirect API resolves article titles. Company identity joins these titles and normalised
 names, with evidenced aliases in `resources/de_aliases.csv`. Current-table dates seed missing open
 membership intervals.
-The 2026-11-22 fixtures contain 625 intervals, with exactly 40 / 50 / 70 members on 2026-11-20.
+The 2026-11-22 fixtures contain 627 intervals, with exactly 40 / 50 / 70 members on 2026-11-20.
+A same-day removal and addition of one company (Linde AG → Linde plc in 2017) is kept as one continuous
+membership. The DAX has 30 members at every year-end 2014–2020 and 40 from 2021.
 
 Cached Yahoo search and evidenced symbol overrides resolve names, with Xetra preferred over Hamburg.
-The 2026-11-22 run covers 201 companies since 2014: 180 resolved, including all 160 current members on
+The 2026-11-23 run covers 202 companies since 2014: 181 resolved, including all 160 current members on
 Xetra. There are 21 delisted names without Yahoo prices on any German venue. Some other delisted names
 have Hamburg prices. Their liquidity is based on index membership because regional volume is not
 representative. They stay in event history; the German signal book contains only tradable `.DE` symbols.

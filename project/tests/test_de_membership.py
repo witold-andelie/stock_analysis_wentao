@@ -181,6 +181,76 @@ def test_resolve_keys_identity():
     assert without_alias[cells[0]] != without_alias[cells[1]]
 
 
+def test_same_day_swap_rule_synthetic():
+    rows = [
+        ("2000-01-01", None, "Open old", "dax"),
+        ("2000-01-02", "Open old", "Open new", "dax"),
+        ("2000-01-02", "Open old", "Open new", "dax"),
+        ("2000-01-03", "Open new", None, "dax"),
+        ("2000-01-02", "First old", "First new", "dax"),
+        ("2000-01-03", "First new", None, "dax"),
+        ("2000-01-02", "First old", "First new", "sdax"),
+        ("2000-01-03", "First new", None, "sdax"),
+        ("2000-01-01", None, "Closed old", "dax"),
+        ("2000-01-02", "Closed old", None, "dax"),
+        ("2000-01-03", "Closed old", "Closed new", "dax"),
+        ("2000-01-04", "Closed new", None, "dax"),
+        ("2000-01-01", None, "Duplicate", "dax"),
+        ("2000-01-01", None, "Duplicate", "dax"),
+        ("2000-01-02", None, "Duplicate", "dax"),
+        ("2000-01-03", "Duplicate", None, "dax"),
+        ("2000-01-03", "Duplicate", None, "dax"),
+        ("2000-01-04", "Duplicate", None, "dax"),
+    ]
+    changes = pd.DataFrame([
+        (pd.Timestamp(date), removed, None, None, added, None, None, index)
+        for date, removed, added, index in rows
+    ], columns=de_membership.CHANGE_COLS)
+    current = pd.DataFrame(columns=de_membership.CURRENT_COLS)
+    keys = {(name, None): name.split()[0] for _, removed, added, _ in rows
+            for name in (removed, added) if name is not None}
+    membership, diag = de_membership.build_de_membership(changes, current, keys)
+
+    def intervals(key: str, index: str) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+        selected = membership.loc[membership["company_key"].eq(key) & membership["index_code"].eq(index)]
+        return list(selected[["start_date", "end_date"]].itertuples(index=False, name=None))
+
+    assert intervals("Open", "dax") == [(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-03"))]
+    for index in ("dax", "sdax"):
+        assert intervals("First", index) == [(de_membership.FOREVER, pd.Timestamp("2000-01-03"))]
+    assert intervals("Closed", "dax") == [
+        (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")),
+        (pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-04")),
+    ]
+    assert intervals("Duplicate", "dax") == [(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-03"))]
+    assert diag["same_day_swap"] == [
+        ("dax", "Closed", pd.Timestamp("2000-01-03")),
+        ("dax", "First", pd.Timestamp("2000-01-02")),
+        ("dax", "Open", pd.Timestamp("2000-01-02")),
+        ("sdax", "First", pd.Timestamp("2000-01-02")),
+    ]
+    assert diag["start_unknown"] == [("sdax", "First")]
+    assert diag["double_add"] == 2
+    assert diag["double_remove"] == 2
+
+
+def test_linde_continuous_in_dax():
+    _, _, keys, membership, diag = _load()
+    key = _key(keys, "Linde")
+    rows = membership.loc[membership["company_key"].eq(key) & membership["index_code"].eq("dax")]
+    assert list(rows[["start_date", "end_date"]].itertuples(index=False, name=None)) == [
+        (de_membership.FOREVER, pd.Timestamp("2023-02-27")),
+    ]
+    assert ("dax", key, pd.Timestamp("2017-10-25")) in diag["same_day_swap"]
+
+
+def test_dax_year_end_counts():
+    _, _, _, membership, _ = _load()
+    for year in range(2014, 2026):
+        active = de_membership.membership_on(membership, f"{year}-12-31")
+        assert active["index_code"].eq("dax").sum() == (30 if year < 2021 else 40)
+
+
 def test_membership_spot_checks():
     _, _, keys, membership, _ = _load()
 
